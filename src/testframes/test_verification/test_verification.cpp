@@ -27,6 +27,10 @@
 #include <stats/correction.h>
 #include <inverse/beamformer/covariance.h>
 #include <inverse/beamformer/lcmv.h>
+#include <inverse/minimumNorm/minimumnorm.h>
+#include <mne/mne_inverse_operator.h>
+#include <mne/mne_sourceestimate.h>
+#include <fiff/fiff_evoked.h>
 #include <Eigen/Core>
 #include <unsupported/Eigen/FFT>
 #include <iostream>
@@ -75,6 +79,7 @@ private slots:
     void verifyICA();
     void verifyStats();
     void verifyLCMV();
+    void verifyMinimumNorm();
     void cleanupTestCase();
 
 private:
@@ -570,6 +575,62 @@ void TestVerification::verifyLCMV()
     double diff_stc = (stc - stc_ref).norm() / stc_ref.norm();
     qDebug() << "Diff LCMV Source (Rel Norm):" << diff_stc;
     QVERIFY(diff_stc < 1e-2);
+}
+
+//=============================================================================================================
+
+void TestVerification::verifyMinimumNorm()
+{
+    // 1. Load Inverse Operator
+    QFile invFile(dataPath + "/mn_inv.fif");
+    QVERIFY(invFile.exists());
+    MNELIB::MNEInverseOperator invOp(invFile);
+    // nsource should be 2, but MinimumNorm works on source space points (2 vertices)
+    QVERIFY(invOp.nsource > 0);
+    
+    // 2. Load Evoked
+    QFile evokedFile(dataPath + "/mn_evoked-ave.fif");
+    QVERIFY(evokedFile.exists());
+    // Use dummy baseline outside of data range to avoid baseline correction (which is default 0,0)
+    // Data is 0 to 1s.
+    FIFFLIB::FiffEvoked evoked(evokedFile, 0, QPair<float,float>(-1.0f, -0.5f));
+    QVERIFY(!evoked.isEmpty());
+    
+    // 3. Compute MNE
+    // lambda2 = 1.0 / 9.0 (SNR=3)
+    float lambda2 = 1.0f / 9.0f;
+    
+    // Method "MNE"
+    INVERSELIB::MinimumNorm mn_mne(invOp, lambda2, "MNE");
+    MNELIB::MNESourceEstimate stc_mne = mn_mne.calculateInverse(evoked);
+    
+    // Verify against python
+    MatrixXd stc_mne_ref;
+    QVERIFY(IOUtils::read_eigen_matrix(stc_mne_ref, dataPath + "/mn_stc_mne.txt"));
+    
+    // Check correlation/diff
+    // STC data is in stc_mne.data
+    // Compare dimensions
+    QCOMPARE(stc_mne.data.rows(), stc_mne_ref.rows());
+    QCOMPARE(stc_mne.data.cols(), stc_mne_ref.cols());
+    
+    double diff_mne = (stc_mne.data - stc_mne_ref).norm() / stc_mne_ref.norm();
+    qDebug() << "Diff MNE (Rel Norm):" << diff_mne;
+    QVERIFY(diff_mne < 0.05); // Allow some tolerance due to float/double differences
+    
+    // 4. Compute dSPM
+    INVERSELIB::MinimumNorm mn_dspm(invOp, lambda2, "dSPM");
+    MNELIB::MNESourceEstimate stc_dspm = mn_dspm.calculateInverse(evoked);
+    
+    MatrixXd stc_dspm_ref;
+    QVERIFY(IOUtils::read_eigen_matrix(stc_dspm_ref, dataPath + "/mn_stc_dspm.txt"));
+    
+    QCOMPARE(stc_dspm.data.rows(), stc_dspm_ref.rows());
+    QCOMPARE(stc_dspm.data.cols(), stc_dspm_ref.cols());
+
+    double diff_dspm = (stc_dspm.data - stc_dspm_ref).norm() / stc_dspm_ref.norm();
+    qDebug() << "Diff dSPM (Rel Norm):" << diff_dspm;
+    QVERIFY(diff_dspm < 0.05);
 }
 
 //=============================================================================================================

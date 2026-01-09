@@ -213,12 +213,12 @@ MNESourceEstimate MinimumNorm::calculateInverse(const MatrixXd &data, float tmin
     if (m_bdSPM)
     {
         printf("(dSPM)...");
-        sol = inv.noisenorm*sol;
+        sol = noise_norm*sol;
     }
     else if (m_bsLORETA)
     {
         printf("(sLORETA)...");
-        sol = inv.noisenorm*sol;
+        sol = noise_norm*sol;
     }
     printf("[done]\n");
 

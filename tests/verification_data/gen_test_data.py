@@ -288,7 +288,88 @@ def main():
     
     # 4. Apply
     S_est = np.dot(W, X)
+    S_est = np.dot(W, X)
     save_data("lcmv_stc", S_est)
+
+    # 9. Minimum Norm (Phase 6)
+    print("Generating Phase 6 (Minimum Norm) data...")
+    import mne
+    from mne.minimum_norm import make_inverse_operator, apply_inverse, write_inverse_operator
+    from mne import make_forward_solution, make_sphere_model, setup_volume_source_space
+    
+    # Create info
+    # 3 channels, 1000 Hz
+    # We need locations for forward solution.
+    # Let's assume 3 magnetometers on x, y, z axes at 0.1m distance.
+    ch_names = ['MEG1', 'MEG2', 'MEG3']
+    ch_types = ['mag'] * 3
+    info = mne.create_info(ch_names=ch_names, sfreq=1000, ch_types=ch_types)
+    
+    # Add dummy locations (loc: r, ex, ey, ez)
+    # Channel 1: on X axis, normal Z
+    info['chs'][0]['loc'] = np.array([0.1, 0, 0,  0,0,1,  0,1,0,  0,0,1]) 
+    # Channel 2: on Y axis, normal Z
+    info['chs'][1]['loc'] = np.array([0, 0.1, 0,  0,0,1,  1,0,0,  0,0,1])
+    # Channel 3: on Z axis, normal X
+    info['chs'][2]['loc'] = np.array([0, 0, 0.1,  1,0,0,  0,1,0,  0,0,1])
+    
+    # Set coil types (T1 Mag)
+    for ch in info['chs']:
+        ch['kind'] = 1 # FIFFV_MEG_CH
+        ch['coil_type'] = 3022 # FIFFV_COIL_VV_MAG_T1
+        ch['coord_frame'] = 1 # FIFFV_COORD_DEVICE (usually) -> transformed to Head
+        # But for sphere model, if we assume Device=Head (identity trans), we can set coord_frame=4 (Head)
+        # to avoid needing a trans file.
+        ch['coord_frame'] = 4 # FIFFV_COORD_HEAD
+    
+    # Sphere Model (r=0.09m)
+    sphere = make_sphere_model(r0=(0., 0., 0.), head_radius=0.09)
+    
+    # Source Space (Discrete, 2 sources)
+    # Source 1: (0.05, 0, 0)
+    # Source 2: (-0.05, 0, 0)
+    rr = np.array([[0.05, 0.0, 0.0], [-0.05, 0.0, 0.0]])
+    # Radial dipoles produce no MEG field in sphere model. Use tangential.
+    nn = np.array([[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]) # Tangential orientation
+    # Use setup_volume_source_space with pos dict for discrete sources
+    src = setup_volume_source_space(subject=None, pos={'rr': rr, 'nn': nn}, sphere=(0,0,0,0.09), bem=sphere)
+    # Hack coordinate frame to HEAD (4) to match sensors
+    src[0]['coord_frame'] = 4 
+    
+    # Forward Solution
+    # trans=None means identity if everything is in HEAD
+    fwd = make_forward_solution(info, trans=None, src=src, bem=sphere, meg=True, eeg=False)
+    
+    # Noise Covariance (Identity)
+    cov = mne.make_ad_hoc_cov(info)
+    
+    # Inverse Operator
+    inv = make_inverse_operator(info, fwd, cov, loose=0.0, depth=None, fixed=True)
+    write_inverse_operator(os.path.join(OUTPUT_DIR, "mn_inv.fif"), inv, overwrite=True)
+    
+    # Simulate Data
+    # Source 1: Sinusoid 10Hz
+    # Source 2: Cosine 20Hz
+    t = np.linspace(0, 1, 1000)
+    stc_data = np.zeros((2, 1000))
+    stc_data[0] = np.sin(2 * np.pi * 10 * t)
+    stc_data[1] = np.cos(2 * np.pi * 20 * t)
+    
+    # Create STC
+    # Discrete source space -> VolSourceEstimate
+    stc_sim = mne.VolSourceEstimate(stc_data, vertices=[src[0]['vertno']], tmin=0, tstep=0.001)
+    
+    # Generate Evoked
+    evoked = mne.apply_forward(fwd, stc_sim, info)
+    evoked.save(os.path.join(OUTPUT_DIR, "mn_evoked-ave.fif"), overwrite=True)
+    
+    # Apply Inverse (MNE)
+    stc_mne = apply_inverse(evoked, inv, lambda2=1.0/9.0, method='MNE')
+    save_data("mn_stc_mne", stc_mne.data)
+    
+    # Apply Inverse (dSPM)
+    stc_dspm = apply_inverse(evoked, inv, lambda2=1.0/9.0, method='dSPM')
+    save_data("mn_stc_dspm", stc_dspm.data)
 
     print("Verification data generation complete.")
 
