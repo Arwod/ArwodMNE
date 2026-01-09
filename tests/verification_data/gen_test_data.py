@@ -508,6 +508,9 @@ def main():
     
     fwd_df = make_forward_solution(info_df, trans=None, src=src_df, bem=sphere_df, meg=True, eeg=False)
     
+    # Save Forward Solution
+    mne.write_forward_solution(os.path.join(OUTPUT_DIR, "df_fwd.fif"), fwd_df, overwrite=True)
+    
     # Simulate
     stc_data_df = np.zeros((1, 10)) # 10 samples
     stc_data_df[0, :] = amp_true # Constant amplitude
