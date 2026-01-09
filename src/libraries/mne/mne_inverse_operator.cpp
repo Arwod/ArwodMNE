@@ -1068,6 +1068,11 @@ MNEInverseOperator MNEInverseOperator::prepare_inverse_operator(qint32 nave ,flo
             //   entries
             //
             //   noise_norm = kron(sqrt(mne_combine_xyz(noise_norm)),ones(3,1));
+            //
+        }
+        else
+        {
+            noise_norm_new = noise_norm;
         }
         VectorXd vOnes = VectorXd::Ones(noise_norm_new.size());
         VectorXd tmp = vOnes.cwiseQuotient(noise_norm_new.cwiseAbs());

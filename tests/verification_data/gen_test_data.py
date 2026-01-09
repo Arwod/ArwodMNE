@@ -7,7 +7,7 @@ Usage:
 """
 
 import numpy as np
-import scipy.signal
+from scipy import signal
 import os
 import sys
 
@@ -67,7 +67,7 @@ def main():
     
     # 2. Hilbert Transform (Envelope)
     # Using scipy.signal.hilbert
-    sig_analytic = scipy.signal.hilbert(sig)
+    sig_analytic = signal.hilbert(sig)
     amplitude_envelope = np.abs(sig_analytic)
     save_data("signal_hilbert_abs", amplitude_envelope)
     
@@ -140,6 +140,396 @@ def main():
         
         save_data("psd_welch_psds", psds[0, 0, :])
         save_data("psd_welch_freqs", freqs_psd)
+
+    # 6. ICA
+    print("Generating Phase 3 (ICA) data...")
+    # Generate synthetic sources
+    n_samples = 2000
+    time = np.linspace(0, 8, n_samples)
+    
+    s1 = np.sin(2 * time)  # Sinusoid
+    s2 = np.sign(np.sin(3 * time))  # Square wave
+    s3 = signal.sawtooth(2 * np.pi * time)  # Sawtooth
+    
+    S = np.c_[s1, s2, s3]
+    S += 0.2 * np.random.normal(size=S.shape)  # Add noise
+    S /= S.std(axis=0)  # Standardize
+    
+    # Mixing matrix
+    A = np.array([[1, 1, 1], [0.5, 2, 1.0], [1.5, 1.0, 2.0]])  # 3 channels, 3 sources
+    X = np.dot(S, A.T)  # (n_samples, n_channels)
+    
+    # MNE expects (n_channels, n_samples)
+    X_mne = X.T
+    
+    save_data("ica_mixed_signal", X_mne)
+    save_data("ica_true_sources", S.T)
+    save_data("ica_mixing_matrix_true", A)
+    
+    # Run sklearn FastICA for reference
+    from sklearn.decomposition import FastICA
+    # sklearn FastICA takes (n_samples, n_features)
+    transformer = FastICA(n_components=3, random_state=0, whiten='unit-variance')
+    S_est = transformer.fit_transform(X)
+    A_est = transformer.mixing_
+    W_est = transformer.components_ # Unmixing * Whitening
+    
+    save_data("ica_sklearn_sources", S_est.T)
+    save_data("ica_sklearn_mixing", A_est)
+    save_data("ica_sklearn_components", W_est)
+
+    # 7. Statistics
+    print("Generating Phase 4 (Stats) data...")
+    from scipy import stats
+    
+    # 7.1 T-Test
+    # Group A: Mean 0, Std 1
+    # Group B: Mean 0.5, Std 1
+    np.random.seed(42)
+    group_a = np.random.normal(0, 1, (20, 5)) # 20 samples, 5 features
+    group_b = np.random.normal(0.5, 1, (20, 5))
+    
+    # 1-Sample T-test (Group B vs 0)
+    t_1samp, p_1samp = stats.ttest_1samp(group_b, 0)
+    save_data("stats_ttest_1samp_data", group_b)
+    save_data("stats_ttest_1samp_t", t_1samp)
+    save_data("stats_ttest_1samp_p", p_1samp)
+    
+    # Independent T-test (Group A vs Group B)
+    t_ind, p_ind = stats.ttest_ind(group_a, group_b)
+    save_data("stats_ttest_ind_data_a", group_a)
+    save_data("stats_ttest_ind_data_b", group_b)
+    save_data("stats_ttest_ind_t", t_ind)
+    save_data("stats_ttest_ind_p", p_ind)
+    
+    # 7.2 Correction
+    # Generate random p-values
+    p_values = np.array([0.001, 0.01, 0.04, 0.05, 0.1, 0.5, 0.8])
+    save_data("stats_p_values", p_values)
+    
+    # Bonferroni
+    p_bonferroni = np.minimum(p_values * len(p_values), 1.0)
+    save_data("stats_bonferroni", p_bonferroni)
+    
+    # FDR (Benjamini-Hochberg)
+    from statsmodels.stats.multitest import multipletests
+    try:
+        # statsmodels might not be installed, use manual calc if fail
+        reject, p_fdr, _, _ = multipletests(p_values, method='fdr_bh')
+    except ImportError:
+        print("statsmodels not found, skipping FDR generation (or manual calc)")
+        # Manual FDR for reference
+        # Sort p: 0.001, 0.01, 0.04, 0.05, 0.1, 0.5, 0.8
+        # Ranks: 1, 2, 3, 4, 5, 6, 7. N=7.
+        # q = p * N / rank
+        # 0.001 * 7 / 1 = 0.007
+        # 0.01 * 7 / 2 = 0.035
+        # 0.04 * 7 / 3 = 0.0933
+        # 0.05 * 7 / 4 = 0.0875 -> monotonic -> 0.0875
+        # ...
+        # For now let's rely on C++ implementation matching logical steps if we can't gen data easily.
+        # But we should verify.
+        p_fdr = np.zeros_like(p_values) # Placeholder
+    
+    if 'multipletests' in locals():
+        save_data("stats_fdr", p_fdr)
+
+    # 8. LCMV Beamformer
+    print("Generating Phase 5 (LCMV) data...")
+    # Simulate data
+    # 5 channels, 2 sources, 1000 samples
+    n_channels = 5
+    n_sources = 2
+    n_times = 1000
+    
+    # Leadfield (Random for simulation)
+    np.random.seed(42)
+    L = np.random.randn(n_channels, n_sources)
+    save_data("lcmv_leadfield", L)
+    
+    # Sources (Sinusoids)
+    t = np.linspace(0, 1, n_times)
+    S = np.zeros((n_sources, n_times))
+    S[0, :] = np.sin(2 * np.pi * 10 * t)
+    S[1, :] = np.cos(2 * np.pi * 20 * t)
+    
+    # Noise
+    noise = 0.1 * np.random.randn(n_channels, n_times)
+    
+    # Data
+    X = np.dot(L, S) + noise
+    save_data("lcmv_data", X)
+    
+    # Manual LCMV in Python to match C++ implementation
+    # 1. Covariance
+    # Center data
+    X_mean = X.mean(axis=1, keepdims=True)
+    X_centered = X - X_mean
+    C = np.dot(X_centered, X_centered.T) / (n_times - 1)
+    
+    # 2. Regularize
+    reg = 0.05
+    trace = np.trace(C)
+    avg_eig = trace / n_channels
+    lambda_reg = reg * avg_eig
+    C_reg = C + lambda_reg * np.eye(n_channels)
+    C_inv = np.linalg.inv(C_reg)
+    
+    # 3. Weights
+    # W = (L^T C^-1 L)^-1 L^T C^-1
+    # num: (n_sources, n_channels)
+    num = np.dot(L.T, C_inv)
+    # den: (n_sources, n_sources)
+    den = np.dot(num, L)
+    den_inv = np.linalg.inv(den)
+    W = np.dot(den_inv, num)
+    
+    save_data("lcmv_weights", W)
+    
+    # 4. Apply
+    S_est = np.dot(W, X)
+    S_est = np.dot(W, X)
+    save_data("lcmv_stc", S_est)
+
+    # 9. Minimum Norm (Phase 6)
+    print("Generating Phase 6 (Minimum Norm) data...")
+    import mne
+    from mne.minimum_norm import make_inverse_operator, apply_inverse, write_inverse_operator
+    from mne import make_forward_solution, make_sphere_model, setup_volume_source_space
+    
+    # Create info
+    # 3 channels, 1000 Hz
+    # We need locations for forward solution.
+    # Let's assume 3 magnetometers on x, y, z axes at 0.1m distance.
+    ch_names = ['MEG1', 'MEG2', 'MEG3']
+    ch_types = ['mag'] * 3
+    info = mne.create_info(ch_names=ch_names, sfreq=1000, ch_types=ch_types)
+    
+    # Add dummy locations (loc: r, ex, ey, ez)
+    # Channel 1: on X axis, normal Z
+    info['chs'][0]['loc'] = np.array([0.1, 0, 0,  0,0,1,  0,1,0,  0,0,1]) 
+    # Channel 2: on Y axis, normal Z
+    info['chs'][1]['loc'] = np.array([0, 0.1, 0,  0,0,1,  1,0,0,  0,0,1])
+    # Channel 3: on Z axis, normal X
+    info['chs'][2]['loc'] = np.array([0, 0, 0.1,  1,0,0,  0,1,0,  0,0,1])
+    
+    # Set coil types (T1 Mag)
+    for ch in info['chs']:
+        ch['kind'] = 1 # FIFFV_MEG_CH
+        ch['coil_type'] = 3022 # FIFFV_COIL_VV_MAG_T1
+        ch['coord_frame'] = 1 # FIFFV_COORD_DEVICE (usually) -> transformed to Head
+        # But for sphere model, if we assume Device=Head (identity trans), we can set coord_frame=4 (Head)
+        # to avoid needing a trans file.
+        ch['coord_frame'] = 4 # FIFFV_COORD_HEAD
+    
+    # Sphere Model (r=0.09m)
+    sphere = make_sphere_model(r0=(0., 0., 0.), head_radius=0.09)
+    
+    # Source Space (Discrete, 2 sources)
+    # Source 1: (0.05, 0, 0)
+    # Source 2: (-0.05, 0, 0)
+    rr = np.array([[0.05, 0.0, 0.0], [-0.05, 0.0, 0.0]])
+    # Radial dipoles produce no MEG field in sphere model. Use tangential.
+    nn = np.array([[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]) # Tangential orientation
+    # Use setup_volume_source_space with pos dict for discrete sources
+    src = setup_volume_source_space(subject=None, pos={'rr': rr, 'nn': nn}, sphere=(0,0,0,0.09), bem=sphere)
+    # Hack coordinate frame to HEAD (4) to match sensors
+    src[0]['coord_frame'] = 4 
+    
+    # Forward Solution
+    # trans=None means identity if everything is in HEAD
+    fwd = make_forward_solution(info, trans=None, src=src, bem=sphere, meg=True, eeg=False)
+    
+    # Noise Covariance (Identity)
+    cov = mne.make_ad_hoc_cov(info)
+    
+    # Inverse Operator
+    inv = make_inverse_operator(info, fwd, cov, loose=0.0, depth=None, fixed=True)
+    write_inverse_operator(os.path.join(OUTPUT_DIR, "mn_inv.fif"), inv, overwrite=True)
+    
+    # Simulate Data
+    # Source 1: Sinusoid 10Hz
+    # Source 2: Cosine 20Hz
+    t = np.linspace(0, 1, 1000)
+    stc_data = np.zeros((2, 1000))
+    stc_data[0] = np.sin(2 * np.pi * 10 * t)
+    stc_data[1] = np.cos(2 * np.pi * 20 * t)
+    
+    # Create STC
+    # Discrete source space -> VolSourceEstimate
+    stc_sim = mne.VolSourceEstimate(stc_data, vertices=[src[0]['vertno']], tmin=0, tstep=0.001)
+    
+    # Generate Evoked
+    evoked = mne.apply_forward(fwd, stc_sim, info)
+    evoked.save(os.path.join(OUTPUT_DIR, "mn_evoked-ave.fif"), overwrite=True)
+    
+    # Apply Inverse (MNE)
+    stc_mne = apply_inverse(evoked, inv, lambda2=1.0/9.0, method='MNE')
+    save_data("mn_stc_mne", stc_mne.data)
+    
+    # Apply Inverse (dSPM)
+    stc_dspm = apply_inverse(evoked, inv, lambda2=1.0/9.0, method='dSPM')
+    save_data("mn_stc_dspm", stc_dspm.data)
+
+    # 10. Connectivity (Phase 7)
+    print("Generating Phase 7 (Connectivity) data...")
+    try:
+        from mne_connectivity import spectral_connectivity_epochs
+    except ImportError:
+        print("mne_connectivity not found. Skipping Phase 7.")
+        spectral_connectivity_epochs = None
+
+    if spectral_connectivity_epochs is not None:
+        # Generate 5 epochs, 2 channels, 1000 samples (1s)
+        n_epochs = 5
+        n_channels = 2
+        n_times = 1000
+        sfreq = 1000
+        
+        data_epochs = np.zeros((n_epochs, n_channels, n_times))
+        t = np.arange(n_times) / sfreq
+        
+        # Chan 1: 10Hz sin
+        # Chan 2: 10Hz cos (pi/2 lag) + small noise
+        # This means constant phase difference of pi/2 across trials -> High PLV, High PLI, High Coherence
+        for i in range(n_epochs):
+            data_epochs[i, 0, :] = np.sin(2 * np.pi * 10 * t)
+            data_epochs[i, 1, :] = np.cos(2 * np.pi * 10 * t) + 0.1 * np.random.randn(n_times)
+            
+            # Save each trial
+            save_data(f"con_trial_{i}", data_epochs[i])
+
+        # Create MNE Epochs
+        info_con = mne.create_info(ch_names=['CH1', 'CH2'], sfreq=sfreq, ch_types='eeg')
+        epochs = mne.EpochsArray(data_epochs, info_con)
+        
+        # Compute Connectivity
+        # C++ implementation uses FFT with Hanning window.
+        # To match, we should apply Hanning window and use mode='fourier' in Python.
+        # Or use mode='multitaper' which is robust.
+        # Let's try to align: C++ uses Hanning window on the whole trial.
+        
+        # Apply Hanning window manually
+        from scipy.signal import get_window
+        window = get_window('hann', n_times)
+        data_epochs_win = data_epochs * window[np.newaxis, np.newaxis, :]
+        
+        epochs_win = mne.EpochsArray(data_epochs_win, info_con)
+        
+        con_methods = ['coh', 'plv', 'pli']
+        # mode='fourier' expects data to be windowed if we want windowing.
+        # We already windowed it.
+        # But wait, 'fourier' mode in mne might expect single epoch?
+        # It averages over epochs.
+        con = spectral_connectivity_epochs(epochs_win, method=con_methods, mode='fourier', 
+                                           sfreq=sfreq, fmin=9, fmax=11, faverage=True, 
+                                           mt_adaptive=False, n_jobs=1)
+        
+        if not isinstance(con, list):
+            con = [con]
+            
+        for method, res in zip(con_methods, con):
+            mat = res.get_data(output='dense')
+            # If shape has extra dims (freqs=1), squeeze
+            if mat.ndim > 2:
+                mat = mat.squeeze()
+            
+            # Symmetrize if strictly lower triangular (mne-connectivity might return this)
+            # Check if upper triangle (k=1) is all zeros and lower triangle (k=-1) is not all zeros
+            if np.all(np.triu(mat, 1) == 0) and not np.all(np.tril(mat, -1) == 0):
+                print(f"Symmetrizing {method} result...")
+                mat = mat + mat.T
+            
+            save_data(f"con_res_{method}", mat)
+
+    # 11. Dipole Fit (Phase 8)
+    print("Generating Phase 8 (Dipole Fit) data...")
+    # Simulate a single dipole source for fitting
+    # Use the same sphere model as Phase 6
+    
+    # 1. Info (3 Mag channels) - reuse info from Phase 6
+    # Or create a more realistic array?
+    # Let's use a standard setup or the simple 3-channel one.
+    # 3 channels might be too few for stable fitting.
+    # Let's create a 30-channel cap (simulated).
+    # Or just use the 3-channel one if it works. 
+    # Dipole fitting needs enough spatial sampling.
+    # Let's use a standard montage or simulate points on a sphere.
+    
+    # Simulate 30 magnetometers on a sphere surface (r=0.1m)
+    # Uniformly distributed?
+    # For simplicity, let's use the 3-channel setup but maybe add a few more.
+    # Actually, let's try with the 3 channels first. If it fails, we increase.
+    # 3 channels (x,y,z axes) might have ambiguity.
+    # Let's add 3 more on the negative axes.
+    ch_names_df = ['MEG1', 'MEG2', 'MEG3', 'MEG4', 'MEG5', 'MEG6']
+    ch_types_df = ['mag'] * 6
+    info_df = mne.create_info(ch_names=ch_names_df, sfreq=1000, ch_types=ch_types_df)
+    
+    # Set identity transformation for dev_head_t
+    # FIFFV_COORD_DEVICE=1, FIFFV_COORD_HEAD=4
+    # trans = {'from': 1, 'to': 4, 'trans': np.eye(4)}
+    # But MNE Python uses Transform class or dict
+    info_df['dev_head_t'] = mne.transforms.Transform('meg', 'head', np.eye(4))
+    
+    # Loc: r, ex, ey, ez
+    # +X
+    info_df['chs'][0]['loc'] = np.array([0.1, 0, 0,  0,0,1,  0,1,0,  0,0,1])
+    # +Y
+    info_df['chs'][1]['loc'] = np.array([0, 0.1, 0,  0,0,1,  1,0,0,  0,0,1])
+    # +Z
+    info_df['chs'][2]['loc'] = np.array([0, 0, 0.1,  1,0,0,  0,1,0,  0,0,1])
+    # -X
+    info_df['chs'][3]['loc'] = np.array([-0.1, 0, 0,  0,0,1,  0,1,0,  0,0,1])
+    # -Y
+    info_df['chs'][4]['loc'] = np.array([0, -0.1, 0,  0,0,1,  1,0,0,  0,0,1])
+    # -Z
+    info_df['chs'][5]['loc'] = np.array([0, 0, -0.1,  1,0,0,  0,1,0,  0,0,1])
+    
+    for ch in info_df['chs']:
+        ch['kind'] = 1 # FIFFV_MEG_CH
+        ch['coil_type'] = 3022 # FIFFV_COIL_VV_MAG_T1
+        ch['coord_frame'] = 4 # HEAD
+        
+    # Sphere Model
+    sphere_df = make_sphere_model(r0=(0., 0., 0.), head_radius=0.09)
+    
+    # True Dipole: [0, 0.05, 0] (y=5cm), Ori: [1, 0, 0] (x-axis), Amp: 10 nAm
+    pos_true = np.array([[0.0, 0.05, 0.0]])
+    ori_true = np.array([[1.0, 0.0, 0.0]])
+    amp_true = 10e-9 # 10 nAm
+    
+    # Forward
+    # We can use make_forward_dipole to compute field
+    # Or setup discrete source space
+    src_df = setup_volume_source_space(subject=None, pos={'rr': pos_true, 'nn': ori_true}, 
+                                       sphere=(0,0,0,0.09), bem=sphere_df)
+    src_df[0]['coord_frame'] = 4
+    
+    fwd_df = make_forward_solution(info_df, trans=None, src=src_df, bem=sphere_df, meg=True, eeg=False)
+    
+    # Save Forward Solution
+    mne.write_forward_solution(os.path.join(OUTPUT_DIR, "df_fwd.fif"), fwd_df, overwrite=True)
+    
+    # Simulate
+    stc_data_df = np.zeros((1, 10)) # 10 samples
+    stc_data_df[0, :] = amp_true # Constant amplitude
+    
+    stc_df = mne.VolSourceEstimate(stc_data_df, vertices=[src_df[0]['vertno']], tmin=0, tstep=0.001)
+    
+    evoked_df = mne.apply_forward(fwd_df, stc_df, info_df)
+    
+    # Add Identity Noise Covariance
+    cov_df = mne.make_ad_hoc_cov(info_df)
+    mne.write_cov(os.path.join(OUTPUT_DIR, "df_noise-cov.fif"), cov_df, overwrite=True)
+    
+    # Save Evoked
+    evoked_df.save(os.path.join(OUTPUT_DIR, "df_evoked-ave.fif"), overwrite=True)
+    
+    # Save True Parameters for verification
+    save_data("df_true_pos", pos_true)
+    save_data("df_true_ori", ori_true)
+    save_data("df_true_amp", np.array([amp_true]))
 
     print("Verification data generation complete.")
 

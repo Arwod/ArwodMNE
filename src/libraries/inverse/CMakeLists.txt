@@ -15,6 +15,8 @@ set(SOURCES
     hpiFit/hpimodelparameters.cpp
     hpiFit/signalmodel.cpp
     inverse_global.cpp
+    beamformer/covariance.cpp
+    beamformer/lcmv.cpp
     minimumNorm/minimumnorm.cpp
     rapMusic/rapmusic.cpp
     rapMusic/pwlrapmusic.cpp
@@ -40,6 +42,8 @@ set(HEADERS
     hpiFit/signalmodel.h
     inverse_global.h
     IInverseAlgorithm.h
+    beamformer/covariance.h
+    beamformer/lcmv.h
     minimumNorm/minimumnorm.h
     rapMusic/rapmusic.h
     rapMusic/pwlrapmusic.h
@@ -108,3 +112,11 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE MNE_INVERSE_LIBRARY MNE_GIT_H
 if(NOT BUILD_SHARED_LIBS)
     target_compile_definitions(${PROJECT_NAME} PRIVATE STATICBUILD)
 endif()
+
+install(FILES
+    inverse_global.h
+    IInverseAlgorithm.h
+    beamformer/covariance.h
+    beamformer/lcmv.h
+    DESTINATION include/libraries/inverse
+)

@@ -63,3 +63,5 @@ if(NOT WASM)
 endif()
 
 add_subdirectory(tfr)
+add_subdirectory(preprocessing)
+add_subdirectory(stats)

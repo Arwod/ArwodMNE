@@ -1,17 +1,17 @@
 cmake_minimum_required(VERSION 3.14)
-project(test_verification LANGUAGES CXX)
+project(test_rt_pipeline_integration LANGUAGES CXX)
 
 #Handle qt uic, moc, rrc automatically
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-set(QT_REQUIRED_COMPONENTS Core Test)
+set(QT_REQUIRED_COMPONENTS Core Test Concurrent Network)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 
 set(SOURCES
-    test_verification.cpp
+    test_rt_pipeline_integration.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -33,6 +33,8 @@ set(MNE_LIBS_REQUIRED
   mne_fiff
   mne_fs
   mne_connectivity
+  mne_rtprocessing
+  mne_fwd
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

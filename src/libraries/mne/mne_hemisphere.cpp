@@ -132,7 +132,7 @@ bool MNEHemisphere::add_geometry_info()
     bool found;
 
     //Create neighboring triangle vector
-    neighbor_tri = QVector<QVector<int> >(this->tris.rows());
+    neighbor_tri = QVector<QVector<int> >(this->np);
 
     //Create neighbor_tri information
     for (p = 0; p < this->tris.rows(); p++) {
