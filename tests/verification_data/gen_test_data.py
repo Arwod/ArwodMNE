@@ -234,6 +234,62 @@ def main():
     if 'multipletests' in locals():
         save_data("stats_fdr", p_fdr)
 
+    # 8. LCMV Beamformer
+    print("Generating Phase 5 (LCMV) data...")
+    # Simulate data
+    # 5 channels, 2 sources, 1000 samples
+    n_channels = 5
+    n_sources = 2
+    n_times = 1000
+    
+    # Leadfield (Random for simulation)
+    np.random.seed(42)
+    L = np.random.randn(n_channels, n_sources)
+    save_data("lcmv_leadfield", L)
+    
+    # Sources (Sinusoids)
+    t = np.linspace(0, 1, n_times)
+    S = np.zeros((n_sources, n_times))
+    S[0, :] = np.sin(2 * np.pi * 10 * t)
+    S[1, :] = np.cos(2 * np.pi * 20 * t)
+    
+    # Noise
+    noise = 0.1 * np.random.randn(n_channels, n_times)
+    
+    # Data
+    X = np.dot(L, S) + noise
+    save_data("lcmv_data", X)
+    
+    # Manual LCMV in Python to match C++ implementation
+    # 1. Covariance
+    # Center data
+    X_mean = X.mean(axis=1, keepdims=True)
+    X_centered = X - X_mean
+    C = np.dot(X_centered, X_centered.T) / (n_times - 1)
+    
+    # 2. Regularize
+    reg = 0.05
+    trace = np.trace(C)
+    avg_eig = trace / n_channels
+    lambda_reg = reg * avg_eig
+    C_reg = C + lambda_reg * np.eye(n_channels)
+    C_inv = np.linalg.inv(C_reg)
+    
+    # 3. Weights
+    # W = (L^T C^-1 L)^-1 L^T C^-1
+    # num: (n_sources, n_channels)
+    num = np.dot(L.T, C_inv)
+    # den: (n_sources, n_sources)
+    den = np.dot(num, L)
+    den_inv = np.linalg.inv(den)
+    W = np.dot(den_inv, num)
+    
+    save_data("lcmv_weights", W)
+    
+    # 4. Apply
+    S_est = np.dot(W, X)
+    save_data("lcmv_stc", S_est)
+
     print("Verification data generation complete.")
 
 if __name__ == "__main__":

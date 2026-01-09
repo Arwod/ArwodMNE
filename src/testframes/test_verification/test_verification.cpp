@@ -25,6 +25,8 @@
 #include <preprocessing/ica.h>
 #include <stats/ttest.h>
 #include <stats/correction.h>
+#include <inverse/beamformer/covariance.h>
+#include <inverse/beamformer/lcmv.h>
 #include <Eigen/Core>
 #include <unsupported/Eigen/FFT>
 #include <iostream>
@@ -72,6 +74,7 @@ private slots:
     void verifyPSD();
     void verifyICA();
     void verifyStats();
+    void verifyLCMV();
     void cleanupTestCase();
 
 private:
@@ -527,6 +530,46 @@ void TestVerification::verifyStats()
     double diff_fdr = (fdr_calc - fdr_ref_mat.col(0)).norm();
     qDebug() << "Diff FDR:" << diff_fdr;
     QVERIFY(diff_fdr < 1e-5);
+}
+
+//=============================================================================================================
+
+void TestVerification::verifyLCMV()
+{
+    // Load Data
+    MatrixXd leadfield; // (n_channels, n_sources)
+    QVERIFY(IOUtils::read_eigen_matrix(leadfield, dataPath + "/lcmv_leadfield.txt"));
+    
+    MatrixXd data; // (n_channels, n_times)
+    QVERIFY(IOUtils::read_eigen_matrix(data, dataPath + "/lcmv_data.txt"));
+    
+    // Compute Covariance
+    MatrixXd cov = INVERSELIB::Covariance::compute_empirical(data);
+    
+    // Compute LCMV Weights
+    MatrixXd weights = INVERSELIB::LCMV::compute_weights(leadfield, cov, 0.05);
+    
+    // Reconstruct Source
+    MatrixXd stc = INVERSELIB::LCMV::apply(weights, data);
+    
+    // Verify Weights
+    MatrixXd weights_ref;
+    QVERIFY(IOUtils::read_eigen_matrix(weights_ref, dataPath + "/lcmv_weights.txt"));
+    
+    // Check correlation of weights
+    // Since reg might differ slightly (if sklearn uses different formula), check correlation or relative error.
+    // Python code should use same formula: reg * trace(C) / n
+    double diff_weights = (weights - weights_ref).norm() / weights_ref.norm();
+    qDebug() << "Diff LCMV Weights (Rel Norm):" << diff_weights;
+    QVERIFY(diff_weights < 1e-2); // Allow 1% error due to solver differences
+    
+    // Verify Source
+    MatrixXd stc_ref;
+    QVERIFY(IOUtils::read_eigen_matrix(stc_ref, dataPath + "/lcmv_stc.txt"));
+    
+    double diff_stc = (stc - stc_ref).norm() / stc_ref.norm();
+    qDebug() << "Diff LCMV Source (Rel Norm):" << diff_stc;
+    QVERIFY(diff_stc < 1e-2);
 }
 
 //=============================================================================================================
