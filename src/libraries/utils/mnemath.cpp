@@ -49,12 +49,14 @@
 
 #include <Eigen/Eigen>
 #include <Eigen/Geometry>
+#include <unsupported/Eigen/FFT>
 
 //=============================================================================================================
 // QT INCLUDES
 //=============================================================================================================
 
 #include <QDebug>
+#include <complex>
 
 //=============================================================================================================
 // USED NAMESPACES
@@ -187,6 +189,165 @@ void MNEMath::get_whitener(MatrixXd &A,
         // and leadfield to the true rank.
         eigvec = eigvec.block(eigvec.rows()-rnk, 0, rnk, eigvec.cols());
     }
+}
+
+//=============================================================================================================
+
+MatrixXcd MNEMath::hilbert(const MatrixXd& data)
+{
+    MatrixXcd analytic_signal(data.rows(), data.cols());
+    int N = data.rows();
+    Eigen::FFT<double> fft;
+
+    // Create H (Analytic Signal Mask)
+    std::vector<double> H(N, 0.0);
+    if (N > 0) H[0] = 1.0;
+    if (N % 2 == 0) {
+        for(int i=1; i<N/2; ++i) H[i] = 2.0;
+        H[N/2] = 1.0;
+    } else {
+        for(int i=1; i<(N+1)/2; ++i) H[i] = 2.0;
+    }
+
+    for (int j = 0; j < data.cols(); ++j) {
+        std::vector<std::complex<double>> time_domain(N);
+        std::vector<std::complex<double>> freq_domain(N);
+        std::vector<std::complex<double>> out_vec(N);
+
+        for(int i=0; i<N; ++i) {
+            time_domain[i] = std::complex<double>(data(i, j), 0.0);
+        }
+
+        fft.fwd(freq_domain, time_domain);
+
+        // Apply H
+        for(int i=0; i<N; ++i) {
+            freq_domain[i] *= H[i];
+        }
+
+        fft.inv(out_vec, freq_domain);
+
+        for(int i=0; i<N; ++i) {
+            analytic_signal(i, j) = out_vec[i];
+        }
+    }
+
+    return analytic_signal;
+}
+
+//=============================================================================================================
+
+VectorXd MNEMath::convolve(const VectorXd& data, const VectorXd& kernel, std::string mode)
+{
+    return convolve(data, kernel, QString::fromStdString(mode));
+}
+
+VectorXd MNEMath::convolve(const VectorXd& data, const VectorXd& kernel, QString mode)
+{
+    int n_data = data.size();
+    int n_kernel = kernel.size();
+    int n_fft = n_data + n_kernel - 1;
+
+    // Pad to power of 2 for efficiency? Eigen FFT handles arbitrary sizes well enough usually.
+    // For exact match with numpy/scipy 'direct' convolution, standard padding is fine.
+
+    Eigen::FFT<double> fft;
+    std::vector<double> data_vec(n_fft, 0.0);
+    std::vector<double> kernel_vec(n_fft, 0.0);
+
+    for(int i=0; i<n_data; ++i) data_vec[i] = data[i];
+    for(int i=0; i<n_kernel; ++i) kernel_vec[i] = kernel[i];
+
+    std::vector<std::complex<double>> data_freq(n_fft);
+    std::vector<std::complex<double>> kernel_freq(n_fft);
+
+    fft.fwd(data_freq, data_vec);
+    fft.fwd(kernel_freq, kernel_vec);
+
+    std::vector<std::complex<double>> conv_freq(n_fft);
+    for(int i=0; i<n_fft; ++i) {
+        conv_freq[i] = data_freq[i] * kernel_freq[i];
+    }
+
+    std::vector<double> conv_time(n_fft);
+    fft.inv(conv_time, conv_freq);
+
+    VectorXd result;
+
+    if (mode == "full") {
+        result.resize(n_fft);
+        for(int i=0; i<n_fft; ++i) result[i] = conv_time[i];
+    } else if (mode == "same") {
+        int start = (n_kernel - 1) / 2;
+        int end = start + n_data;
+        if (n_data == 0) return VectorXd(); 
+        result.resize(n_data);
+        for(int i=0; i<n_data; ++i) {
+            if (start + i < n_fft)
+                result[i] = conv_time[start + i];
+            else
+                result[i] = 0.0;
+        }
+    } else if (mode == "valid") {
+        int valid_len = n_data - n_kernel + 1;
+        if (valid_len < 0) return VectorXd();
+        int start = n_kernel - 1;
+        result.resize(valid_len);
+        for(int i=0; i<valid_len; ++i) {
+            result[i] = conv_time[start + i];
+        }
+    } else {
+         qWarning() << "[MNEMath::convolve] Mode" << mode << "not supported. Returning full convolution.";
+         result.resize(n_fft);
+         for(int i=0; i<n_fft; ++i) result[i] = conv_time[i];
+    }
+
+    return result;
+}
+
+//=============================================================================================================
+
+VectorXd MNEMath::hanning(int n)
+{
+    VectorXd w(n);
+    if (n == 1) {
+        w[0] = 1.0;
+        return w;
+    }
+    for (int i = 0; i < n; i++) {
+        w[i] = 0.5 - 0.5 * cos(2.0 * M_PI * i / (n - 1));
+    }
+    return w;
+}
+
+//=============================================================================================================
+
+VectorXd MNEMath::hamming(int n)
+{
+    VectorXd w(n);
+    if (n == 1) {
+        w[0] = 1.0;
+        return w;
+    }
+    for (int i = 0; i < n; i++) {
+        w[i] = 0.54 - 0.46 * cos(2.0 * M_PI * i / (n - 1));
+    }
+    return w;
+}
+
+//=============================================================================================================
+
+VectorXd MNEMath::blackman(int n)
+{
+    VectorXd w(n);
+    if (n == 1) {
+        w[0] = 1.0;
+        return w;
+    }
+    for (int i = 0; i < n; i++) {
+        w[i] = 0.42 - 0.5 * cos(2.0 * M_PI * i / (n - 1)) + 0.08 * cos(4.0 * M_PI * i / (n - 1));
+    }
+    return w;
 }
 
 //=============================================================================================================

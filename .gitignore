@@ -76,3 +76,8 @@ compile_commands.json
 .cache/*
 
 codecov
+
+# Verification Data
+data/
+*.npy
+*.fif

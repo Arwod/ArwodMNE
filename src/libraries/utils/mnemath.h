@@ -183,6 +183,55 @@ public:
 
     //=========================================================================================================
     /**
+     * Calculates the Hilbert transform of the signal.
+     * Operates column-wise.
+     *
+     * @param[in] data     Input signal.
+     * @return             Hilbert transformed signal (complex).
+     */
+    static Eigen::MatrixXcd hilbert(const Eigen::MatrixXd& data);
+
+    //=========================================================================================================
+    /**
+     * Calculates the 1D convolution of two signals using FFT.
+     *
+     * @param[in] data     Input signal.
+     * @param[in] kernel   Convolution kernel.
+     * @param[in] mode     Convolution mode: "full", "same", "valid". Default "full".
+     * @return             Convolved signal.
+     */
+    static Eigen::VectorXd convolve(const Eigen::VectorXd& data, const Eigen::VectorXd& kernel, QString mode = "full");
+    static Eigen::VectorXd convolve(const Eigen::VectorXd& data, const Eigen::VectorXd& kernel, std::string mode);
+
+    //=========================================================================================================
+    /**
+     * Creates a Hanning window
+     *
+     * @param[in] n     Window length.
+     * @return          Hanning window.
+     */
+    static Eigen::VectorXd hanning(int n);
+
+    //=========================================================================================================
+    /**
+     * Creates a Hamming window
+     *
+     * @param[in] n     Window length.
+     * @return          Hamming window.
+     */
+    static Eigen::VectorXd hamming(int n);
+
+    //=========================================================================================================
+    /**
+     * Creates a Blackman window
+     *
+     * @param[in] n     Window length.
+     * @return          Blackman window.
+     */
+    static Eigen::VectorXd blackman(int n);
+
+    //=========================================================================================================
+    /**
      * Find the intersection of two vectors
      *
      * @param[in] v1         Input vector 1.
