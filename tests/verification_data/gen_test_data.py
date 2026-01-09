@@ -7,7 +7,7 @@ Usage:
 """
 
 import numpy as np
-import scipy.signal
+from scipy import signal
 import os
 import sys
 
@@ -67,7 +67,7 @@ def main():
     
     # 2. Hilbert Transform (Envelope)
     # Using scipy.signal.hilbert
-    sig_analytic = scipy.signal.hilbert(sig)
+    sig_analytic = signal.hilbert(sig)
     amplitude_envelope = np.abs(sig_analytic)
     save_data("signal_hilbert_abs", amplitude_envelope)
     
@@ -140,6 +140,43 @@ def main():
         
         save_data("psd_welch_psds", psds[0, 0, :])
         save_data("psd_welch_freqs", freqs_psd)
+
+    # 6. ICA
+    print("Generating Phase 3 (ICA) data...")
+    # Generate synthetic sources
+    n_samples = 2000
+    time = np.linspace(0, 8, n_samples)
+    
+    s1 = np.sin(2 * time)  # Sinusoid
+    s2 = np.sign(np.sin(3 * time))  # Square wave
+    s3 = signal.sawtooth(2 * np.pi * time)  # Sawtooth
+    
+    S = np.c_[s1, s2, s3]
+    S += 0.2 * np.random.normal(size=S.shape)  # Add noise
+    S /= S.std(axis=0)  # Standardize
+    
+    # Mixing matrix
+    A = np.array([[1, 1, 1], [0.5, 2, 1.0], [1.5, 1.0, 2.0]])  # 3 channels, 3 sources
+    X = np.dot(S, A.T)  # (n_samples, n_channels)
+    
+    # MNE expects (n_channels, n_samples)
+    X_mne = X.T
+    
+    save_data("ica_mixed_signal", X_mne)
+    save_data("ica_true_sources", S.T)
+    save_data("ica_mixing_matrix_true", A)
+    
+    # Run sklearn FastICA for reference
+    from sklearn.decomposition import FastICA
+    # sklearn FastICA takes (n_samples, n_features)
+    transformer = FastICA(n_components=3, random_state=0, whiten='unit-variance')
+    S_est = transformer.fit_transform(X)
+    A_est = transformer.mixing_
+    W_est = transformer.components_ # Unmixing * Whitening
+    
+    save_data("ica_sklearn_sources", S_est.T)
+    save_data("ica_sklearn_mixing", A_est)
+    save_data("ica_sklearn_components", W_est)
 
     print("Verification data generation complete.")
 

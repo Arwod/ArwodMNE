@@ -20,6 +20,9 @@
 #include <tfr/tfr_utils.h>
 #include <tfr/tfr_compute.h>
 #include <tfr/psd.h>
+#include <preprocessing/pca.h>
+#include <preprocessing/fastica.h>
+#include <preprocessing/ica.h>
 #include <Eigen/Core>
 #include <unsupported/Eigen/FFT>
 #include <iostream>
@@ -65,6 +68,7 @@ private slots:
     void verifyMorlet();
     void verifyTFR();
     void verifyPSD();
+    void verifyICA();
     void cleanupTestCase();
 
 private:
@@ -385,6 +389,63 @@ void TestVerification::verifyPSD()
     qDebug() << "Diff PSDs:" << diff_psds;
     
     QVERIFY(diff_psds < 5e-4);
+}
+
+//=============================================================================================================
+
+void TestVerification::verifyICA()
+{
+    // Load mixed signal
+    MatrixXd X_mne; // (n_channels, n_samples)
+    QVERIFY(IOUtils::read_eigen_matrix(X_mne, dataPath + "/ica_mixed_signal.txt"));
+    if (X_mne.rows() > X_mne.cols()) X_mne.transposeInPlace(); // Ensure 3x2000
+
+    // Load sklearn results
+    MatrixXd S_sklearn; // (n_samples, n_components) -> need to transpose to (n_components, n_samples)
+    QVERIFY(IOUtils::read_eigen_matrix(S_sklearn, dataPath + "/ica_sklearn_sources.txt"));
+    if (S_sklearn.rows() > S_sklearn.cols()) S_sklearn.transposeInPlace();
+    
+    // Run C++ ICA
+    PREPROCESSINGLIB::ICA ica(3, "fastica", "logcosh", 0); // Random state 0
+    ica.fit(X_mne);
+    
+    MatrixXd S_cpp = ica.get_sources(X_mne); // (3, 2000)
+    
+    QCOMPARE(S_cpp.rows(), 3);
+    QCOMPARE(S_cpp.cols(), X_mne.cols());
+    
+    // Compare Sources
+    // ICA sources can be permuted and sign-flipped.
+    // Check correlation between each C++ source and Sklearn source.
+    
+    for (int i = 0; i < 3; ++i) {
+        VectorXd s_cpp = S_cpp.row(i);
+        // Find best match in sklearn sources
+        double max_corr = 0.0;
+        
+        for (int j = 0; j < 3; ++j) {
+            VectorXd s_sk = S_sklearn.row(j);
+            
+            // Pearson correlation
+            double mean_cpp = s_cpp.mean();
+            double mean_sk = s_sk.mean();
+            
+            VectorXd centered_cpp = s_cpp.array() - mean_cpp;
+            VectorXd centered_sk = s_sk.array() - mean_sk;
+            
+            double corr = centered_cpp.dot(centered_sk) / (centered_cpp.norm() * centered_sk.norm());
+            if (std::abs(corr) > max_corr) {
+                max_corr = std::abs(corr);
+            }
+        }
+        
+        qDebug() << "ICA Source" << i << "Max Correlation:" << max_corr;
+        QVERIFY(max_corr > 0.95); // Should be very high
+    }
+    
+    // Verify Unmixing Matrix?
+    // A_inv = W. If A is estimated correctly, W * A_true should be Permutation * Scale.
+    // But let's rely on sources correlation.
 }
 
 //=============================================================================================================
