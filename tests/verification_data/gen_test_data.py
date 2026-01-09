@@ -178,6 +178,62 @@ def main():
     save_data("ica_sklearn_mixing", A_est)
     save_data("ica_sklearn_components", W_est)
 
+    # 7. Statistics
+    print("Generating Phase 4 (Stats) data...")
+    from scipy import stats
+    
+    # 7.1 T-Test
+    # Group A: Mean 0, Std 1
+    # Group B: Mean 0.5, Std 1
+    np.random.seed(42)
+    group_a = np.random.normal(0, 1, (20, 5)) # 20 samples, 5 features
+    group_b = np.random.normal(0.5, 1, (20, 5))
+    
+    # 1-Sample T-test (Group B vs 0)
+    t_1samp, p_1samp = stats.ttest_1samp(group_b, 0)
+    save_data("stats_ttest_1samp_data", group_b)
+    save_data("stats_ttest_1samp_t", t_1samp)
+    save_data("stats_ttest_1samp_p", p_1samp)
+    
+    # Independent T-test (Group A vs Group B)
+    t_ind, p_ind = stats.ttest_ind(group_a, group_b)
+    save_data("stats_ttest_ind_data_a", group_a)
+    save_data("stats_ttest_ind_data_b", group_b)
+    save_data("stats_ttest_ind_t", t_ind)
+    save_data("stats_ttest_ind_p", p_ind)
+    
+    # 7.2 Correction
+    # Generate random p-values
+    p_values = np.array([0.001, 0.01, 0.04, 0.05, 0.1, 0.5, 0.8])
+    save_data("stats_p_values", p_values)
+    
+    # Bonferroni
+    p_bonferroni = np.minimum(p_values * len(p_values), 1.0)
+    save_data("stats_bonferroni", p_bonferroni)
+    
+    # FDR (Benjamini-Hochberg)
+    from statsmodels.stats.multitest import multipletests
+    try:
+        # statsmodels might not be installed, use manual calc if fail
+        reject, p_fdr, _, _ = multipletests(p_values, method='fdr_bh')
+    except ImportError:
+        print("statsmodels not found, skipping FDR generation (or manual calc)")
+        # Manual FDR for reference
+        # Sort p: 0.001, 0.01, 0.04, 0.05, 0.1, 0.5, 0.8
+        # Ranks: 1, 2, 3, 4, 5, 6, 7. N=7.
+        # q = p * N / rank
+        # 0.001 * 7 / 1 = 0.007
+        # 0.01 * 7 / 2 = 0.035
+        # 0.04 * 7 / 3 = 0.0933
+        # 0.05 * 7 / 4 = 0.0875 -> monotonic -> 0.0875
+        # ...
+        # For now let's rely on C++ implementation matching logical steps if we can't gen data easily.
+        # But we should verify.
+        p_fdr = np.zeros_like(p_values) # Placeholder
+    
+    if 'multipletests' in locals():
+        save_data("stats_fdr", p_fdr)
+
     print("Verification data generation complete.")
 
 if __name__ == "__main__":

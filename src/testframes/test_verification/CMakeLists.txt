@@ -27,6 +27,7 @@ set(MNE_LIBS_REQUIRED
   mne_utils
   mne_tfr
   mne_preprocessing
+  mne_stats
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

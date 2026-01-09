@@ -23,6 +23,8 @@
 #include <preprocessing/pca.h>
 #include <preprocessing/fastica.h>
 #include <preprocessing/ica.h>
+#include <stats/ttest.h>
+#include <stats/correction.h>
 #include <Eigen/Core>
 #include <unsupported/Eigen/FFT>
 #include <iostream>
@@ -69,6 +71,7 @@ private slots:
     void verifyTFR();
     void verifyPSD();
     void verifyICA();
+    void verifyStats();
     void cleanupTestCase();
 
 private:
@@ -446,6 +449,84 @@ void TestVerification::verifyICA()
     // Verify Unmixing Matrix?
     // A_inv = W. If A is estimated correctly, W * A_true should be Permutation * Scale.
     // But let's rely on sources correlation.
+}
+
+//=============================================================================================================
+
+void TestVerification::verifyStats()
+{
+    // 1. T-Test 1-Sample
+    MatrixXd data_1samp;
+    QVERIFY(IOUtils::read_eigen_matrix(data_1samp, dataPath + "/stats_ttest_1samp_data.txt"));
+    
+    auto res_1samp = STATSLIB::TTest::ttest_1samp(data_1samp);
+    VectorXd t_calc = res_1samp.first;
+    VectorXd p_calc = res_1samp.second;
+    
+    MatrixXd t_ref_mat, p_ref_mat;
+    QVERIFY(IOUtils::read_eigen_matrix(t_ref_mat, dataPath + "/stats_ttest_1samp_t.txt"));
+    QVERIFY(IOUtils::read_eigen_matrix(p_ref_mat, dataPath + "/stats_ttest_1samp_p.txt"));
+    
+    // Check T-values
+    double diff_t = (t_calc - t_ref_mat.row(0)).norm();
+    qDebug() << "Diff T-Test 1Samp T:" << diff_t;
+    QVERIFY(diff_t < 1e-4);
+    
+    // Check P-values (approx)
+    double diff_p = (p_calc - p_ref_mat.row(0)).norm();
+    qDebug() << "Diff T-Test 1Samp P:" << diff_p;
+    QVERIFY(diff_p < 0.05); // Looser tolerance for approximation
+    
+    // 2. T-Test Ind
+    MatrixXd data_a, data_b;
+    QVERIFY(IOUtils::read_eigen_matrix(data_a, dataPath + "/stats_ttest_ind_data_a.txt"));
+    QVERIFY(IOUtils::read_eigen_matrix(data_b, dataPath + "/stats_ttest_ind_data_b.txt"));
+    
+    auto res_ind = STATSLIB::TTest::ttest_ind(data_a, data_b);
+    t_calc = res_ind.first;
+    p_calc = res_ind.second;
+    
+    QVERIFY(IOUtils::read_eigen_matrix(t_ref_mat, dataPath + "/stats_ttest_ind_t.txt"));
+    QVERIFY(IOUtils::read_eigen_matrix(p_ref_mat, dataPath + "/stats_ttest_ind_p.txt"));
+    
+    diff_t = (t_calc - t_ref_mat.row(0)).norm();
+    qDebug() << "Diff T-Test Ind T:" << diff_t;
+    QVERIFY(diff_t < 1e-4);
+    
+    diff_p = (p_calc - p_ref_mat.row(0)).norm();
+    qDebug() << "Diff T-Test Ind P:" << diff_p;
+    QVERIFY(diff_p < 0.05);
+    
+    // 3. Correction
+    MatrixXd p_vals_mat;
+    QVERIFY(IOUtils::read_eigen_matrix(p_vals_mat, dataPath + "/stats_p_values.txt"));
+    VectorXd p_vals = p_vals_mat.row(0); // Assuming saved as 1xN or Nx1, usually read as Matrix
+    if (p_vals_mat.rows() > 1) p_vals = p_vals_mat.col(0);
+    
+    // Bonferroni
+    VectorXd bonf_calc = STATSLIB::Correction::bonferroni(p_vals);
+    MatrixXd bonf_ref_mat;
+    QVERIFY(IOUtils::read_eigen_matrix(bonf_ref_mat, dataPath + "/stats_bonferroni.txt"));
+    
+    double diff_bonf = (bonf_calc - bonf_ref_mat.row(0).transpose()).norm(); 
+    // Wait, read_eigen_matrix might read 1D array as 1xN or Nx1 depending on file format
+    // numpy savetxt 1D saves as column usually? No, rows.
+    // Let's check dimensions.
+    if (bonf_ref_mat.rows() != bonf_calc.rows()) bonf_ref_mat.transposeInPlace();
+    diff_bonf = (bonf_calc - bonf_ref_mat.col(0)).norm();
+    
+    qDebug() << "Diff Bonferroni:" << diff_bonf;
+    QVERIFY(diff_bonf < 1e-5);
+    
+    // FDR
+    VectorXd fdr_calc = STATSLIB::Correction::fdr(p_vals);
+    MatrixXd fdr_ref_mat;
+    QVERIFY(IOUtils::read_eigen_matrix(fdr_ref_mat, dataPath + "/stats_fdr.txt"));
+    if (fdr_ref_mat.rows() != fdr_calc.rows()) fdr_ref_mat.transposeInPlace();
+    
+    double diff_fdr = (fdr_calc - fdr_ref_mat.col(0)).norm();
+    qDebug() << "Diff FDR:" << diff_fdr;
+    QVERIFY(diff_fdr < 1e-5);
 }
 
 //=============================================================================================================
