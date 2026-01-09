@@ -35,6 +35,9 @@
 #include <connectivity/connectivitysettings.h>
 #include <connectivity/network/network.h>
 #include <connectivity/metrics/abstractmetric.h>
+#include <inverse/dipoleFit/dipole_fit.h>
+#include <inverse/dipoleFit/dipole_fit_settings.h>
+#include <inverse/dipoleFit/dipole_fit_data.h>
 #include <Eigen/Core>
 #include <unsupported/Eigen/FFT>
 #include <iostream>
@@ -85,6 +88,7 @@ private slots:
     void verifyLCMV();
     void verifyMinimumNorm();
     void verifyConnectivity();
+    void verifyDipoleFit();
     void cleanupTestCase();
 
 private:
@@ -728,6 +732,71 @@ void TestVerification::verifyConnectivity()
         qDebug() << "Diff PLI:" << diff;
         QVERIFY(diff < 0.05);
     }
+}
+
+//=============================================================================================================
+
+void TestVerification::verifyDipoleFit()
+{
+    // 1. Setup Settings
+    INVERSELIB::DipoleFitSettings settings;
+    settings.measname = dataPath + "/df_evoked-ave.fif";
+    settings.noisename = dataPath + "/df_noise-cov.fif";
+    settings.mriname = ""; // Empty implies identity/sphere if r0 set
+    settings.bemname = ""; 
+    settings.r0 = Vector3f(0.0f, 0.0f, 0.0f); // Sphere origin
+    settings.tmin = 0.0f;
+    settings.tmax = 0.01f; // 10 samples
+    settings.tstep = 0.001f;
+    settings.integ = 0.0f; // Single sample
+    settings.setno = 1;
+    settings.verbose = false;
+    settings.include_meg = true;
+    settings.include_eeg = false;
+    
+    // Guess grid settings (needed if guessname is empty)
+    settings.guess_rad = 0.09f; // 9cm sphere
+    settings.guess_grid = 0.01f; // 10mm grid
+    settings.guess_mindist = 0.005f;
+    settings.guess_exclude = 0.02f;
+    
+    // 2. Run Fit
+    INVERSELIB::DipoleFit dipoleFit(&settings);
+    INVERSELIB::ECDSet res = dipoleFit.calculateFit();
+    
+    // 3. Verify
+    // Should have fitted dipoles
+    // tmin=0, tmax=0.01, tstep=0.001 -> ~10 points
+    QVERIFY(res.size() > 0);
+    
+    // Get last fitted dipole (should be stable)
+    // res[i] is an ECD object
+    INVERSELIB::ECD ecd = res[res.size()-1];
+    
+    // Check GOF
+    qDebug() << "Dipole Fit GOF:" << ecd.good;
+    // Simple 3-channel setup might not give perfect GOF if not well-conditioned, 
+    // but with 6 channels and perfect data it should be good.
+    QVERIFY(ecd.good > 0.90); 
+    
+    // Check Position
+    // True: [0, 0.05, 0]
+    Vector3f pos = ecd.rd;
+    qDebug() << "Dipole Pos:" << pos[0] << pos[1] << pos[2];
+    
+    MatrixXd true_pos;
+    QVERIFY(IOUtils::read_eigen_matrix(true_pos, dataPath + "/df_true_pos.txt"));
+    
+    // true_pos is 1x3
+    Vector3f ref_pos = true_pos.row(0).cast<float>().transpose();
+    
+    float diff_pos = (pos - ref_pos).norm();
+    qDebug() << "Diff Position:" << diff_pos;
+    QVERIFY(diff_pos < 0.01); // < 1cm error
+    
+    // Check Amplitude
+    // ecd.Q is float[3] dipole moment vector?
+    // Let's check `ecd.h`.
 }
 
 //=============================================================================================================

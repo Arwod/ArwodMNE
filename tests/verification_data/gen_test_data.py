@@ -442,6 +442,92 @@ def main():
             
             save_data(f"con_res_{method}", mat)
 
+    # 11. Dipole Fit (Phase 8)
+    print("Generating Phase 8 (Dipole Fit) data...")
+    # Simulate a single dipole source for fitting
+    # Use the same sphere model as Phase 6
+    
+    # 1. Info (3 Mag channels) - reuse info from Phase 6
+    # Or create a more realistic array?
+    # Let's use a standard setup or the simple 3-channel one.
+    # 3 channels might be too few for stable fitting.
+    # Let's create a 30-channel cap (simulated).
+    # Or just use the 3-channel one if it works. 
+    # Dipole fitting needs enough spatial sampling.
+    # Let's use a standard montage or simulate points on a sphere.
+    
+    # Simulate 30 magnetometers on a sphere surface (r=0.1m)
+    # Uniformly distributed?
+    # For simplicity, let's use the 3-channel setup but maybe add a few more.
+    # Actually, let's try with the 3 channels first. If it fails, we increase.
+    # 3 channels (x,y,z axes) might have ambiguity.
+    # Let's add 3 more on the negative axes.
+    ch_names_df = ['MEG1', 'MEG2', 'MEG3', 'MEG4', 'MEG5', 'MEG6']
+    ch_types_df = ['mag'] * 6
+    info_df = mne.create_info(ch_names=ch_names_df, sfreq=1000, ch_types=ch_types_df)
+    
+    # Set identity transformation for dev_head_t
+    # FIFFV_COORD_DEVICE=1, FIFFV_COORD_HEAD=4
+    # trans = {'from': 1, 'to': 4, 'trans': np.eye(4)}
+    # But MNE Python uses Transform class or dict
+    info_df['dev_head_t'] = mne.transforms.Transform('meg', 'head', np.eye(4))
+    
+    # Loc: r, ex, ey, ez
+    # +X
+    info_df['chs'][0]['loc'] = np.array([0.1, 0, 0,  0,0,1,  0,1,0,  0,0,1])
+    # +Y
+    info_df['chs'][1]['loc'] = np.array([0, 0.1, 0,  0,0,1,  1,0,0,  0,0,1])
+    # +Z
+    info_df['chs'][2]['loc'] = np.array([0, 0, 0.1,  1,0,0,  0,1,0,  0,0,1])
+    # -X
+    info_df['chs'][3]['loc'] = np.array([-0.1, 0, 0,  0,0,1,  0,1,0,  0,0,1])
+    # -Y
+    info_df['chs'][4]['loc'] = np.array([0, -0.1, 0,  0,0,1,  1,0,0,  0,0,1])
+    # -Z
+    info_df['chs'][5]['loc'] = np.array([0, 0, -0.1,  1,0,0,  0,1,0,  0,0,1])
+    
+    for ch in info_df['chs']:
+        ch['kind'] = 1 # FIFFV_MEG_CH
+        ch['coil_type'] = 3022 # FIFFV_COIL_VV_MAG_T1
+        ch['coord_frame'] = 4 # HEAD
+        
+    # Sphere Model
+    sphere_df = make_sphere_model(r0=(0., 0., 0.), head_radius=0.09)
+    
+    # True Dipole: [0, 0.05, 0] (y=5cm), Ori: [1, 0, 0] (x-axis), Amp: 10 nAm
+    pos_true = np.array([[0.0, 0.05, 0.0]])
+    ori_true = np.array([[1.0, 0.0, 0.0]])
+    amp_true = 10e-9 # 10 nAm
+    
+    # Forward
+    # We can use make_forward_dipole to compute field
+    # Or setup discrete source space
+    src_df = setup_volume_source_space(subject=None, pos={'rr': pos_true, 'nn': ori_true}, 
+                                       sphere=(0,0,0,0.09), bem=sphere_df)
+    src_df[0]['coord_frame'] = 4
+    
+    fwd_df = make_forward_solution(info_df, trans=None, src=src_df, bem=sphere_df, meg=True, eeg=False)
+    
+    # Simulate
+    stc_data_df = np.zeros((1, 10)) # 10 samples
+    stc_data_df[0, :] = amp_true # Constant amplitude
+    
+    stc_df = mne.VolSourceEstimate(stc_data_df, vertices=[src_df[0]['vertno']], tmin=0, tstep=0.001)
+    
+    evoked_df = mne.apply_forward(fwd_df, stc_df, info_df)
+    
+    # Add Identity Noise Covariance
+    cov_df = mne.make_ad_hoc_cov(info_df)
+    mne.write_cov(os.path.join(OUTPUT_DIR, "df_noise-cov.fif"), cov_df, overwrite=True)
+    
+    # Save Evoked
+    evoked_df.save(os.path.join(OUTPUT_DIR, "df_evoked-ave.fif"), overwrite=True)
+    
+    # Save True Parameters for verification
+    save_data("df_true_pos", pos_true)
+    save_data("df_true_ori", ori_true)
+    save_data("df_true_amp", np.array([amp_true]))
+
     print("Verification data generation complete.")
 
 if __name__ == "__main__":
