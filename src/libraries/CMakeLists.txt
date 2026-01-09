@@ -61,3 +61,5 @@ add_subdirectory(disp)
 if(NOT WASM)
   add_subdirectory(disp3D)
 endif()
+
+add_subdirectory(tfr)

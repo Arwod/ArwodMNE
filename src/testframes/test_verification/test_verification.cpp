@@ -17,6 +17,9 @@
 
 #include <utils/ioutils.h>
 #include <utils/mnemath.h>
+#include <tfr/tfr_utils.h>
+#include <tfr/tfr_compute.h>
+#include <tfr/psd.h>
 #include <Eigen/Core>
 #include <unsupported/Eigen/FFT>
 #include <iostream>
@@ -59,6 +62,9 @@ private slots:
     void verifyHilbert();
     void verifyConvolution();
     void verifyWindows();
+    void verifyMorlet();
+    void verifyTFR();
+    void verifyPSD();
     void cleanupTestCase();
 
 private:
@@ -233,6 +239,152 @@ void TestVerification::verifyWindows()
     double max_diff_blackman = (blackman - mWinBlackman.col(0)).cwiseAbs().maxCoeff();
     qDebug() << "Max Difference Blackman:" << max_diff_blackman;
     QVERIFY(max_diff_blackman < 1e-7);
+}
+
+//=============================================================================================================
+
+void TestVerification::verifyMorlet()
+{
+    double sfreq = 1000.0;
+    VectorXd freqs(2);
+    freqs << 10.0, 20.0;
+    double n_cycles = 5.0;
+
+    std::vector<VectorXcd> wavelets = TFRLIB::TFRUtils::morlet(sfreq, freqs, n_cycles);
+
+    QCOMPARE(wavelets.size(), 2);
+
+    // 10Hz
+    MatrixXd w10_real, w10_imag;
+    QVERIFY(IOUtils::read_eigen_matrix(w10_real, dataPath + "/tfr_morlet_w_10hz_real.txt"));
+    QVERIFY(IOUtils::read_eigen_matrix(w10_imag, dataPath + "/tfr_morlet_w_10hz_imag.txt"));
+
+    if (w10_real.cols() > 1 && w10_real.rows() == 1)
+        w10_real.transposeInPlace();
+    if (w10_imag.cols() > 1 && w10_imag.rows() == 1)
+        w10_imag.transposeInPlace();
+
+    VectorXcd w10_ref(w10_real.rows());
+    for (int i = 0; i < w10_real.rows(); ++i)
+        w10_ref[i] = std::complex<double>(w10_real(i, 0), w10_imag(i, 0));
+
+    QCOMPARE(wavelets[0].size(), w10_ref.size());
+    double diff10 = (wavelets[0] - w10_ref).norm();
+    qDebug() << "Diff Morlet 10Hz:" << diff10;
+    QVERIFY(diff10 < 1e-5);
+
+    // 20Hz
+    MatrixXd w20_real, w20_imag;
+    QVERIFY(IOUtils::read_eigen_matrix(w20_real, dataPath + "/tfr_morlet_w_20hz_real.txt"));
+    QVERIFY(IOUtils::read_eigen_matrix(w20_imag, dataPath + "/tfr_morlet_w_20hz_imag.txt"));
+
+    if (w20_real.cols() > 1 && w20_real.rows() == 1)
+        w20_real.transposeInPlace();
+    if (w20_imag.cols() > 1 && w20_imag.rows() == 1)
+        w20_imag.transposeInPlace();
+
+    VectorXcd w20_ref(w20_real.rows());
+    for (int i = 0; i < w20_real.rows(); ++i)
+        w20_ref[i] = std::complex<double>(w20_real(i, 0), w20_imag(i, 0));
+
+    QCOMPARE(wavelets[1].size(), w20_ref.size());
+    double diff20 = (wavelets[1] - w20_ref).norm();
+    qDebug() << "Diff Morlet 20Hz:" << diff20;
+    QVERIFY(diff20 < 1e-5);
+}
+
+//=============================================================================================================
+
+void TestVerification::verifyTFR()
+{
+    // Load input signal (1 channel)
+    double sfreq = 1000.0;
+    VectorXd freqs(2);
+    freqs << 10.0, 20.0;
+    double n_cycles = 5.0;
+
+    // tfr_morlet expects MatrixXd (channels x times)
+    // mSignalRaw is (times x 1), transpose it
+    MatrixXd input_data = mSignalRaw.transpose();
+
+    auto power = TFRLIB::TFRCompute::tfr_morlet(input_data, sfreq, freqs, n_cycles);
+
+    QCOMPARE(power.size(), 1);    // 1 channel
+    QCOMPARE(power[0].size(), 2); // 2 freqs
+
+    // Verify 10Hz Power
+    MatrixXd p10_ref;
+    QVERIFY(IOUtils::read_eigen_matrix(p10_ref, dataPath + "/tfr_power_10hz.txt"));
+    if (p10_ref.rows() == 1)
+        p10_ref.transposeInPlace();
+
+    QCOMPARE(power[0][0].size(), p10_ref.size());
+
+    // Compare center to avoid edge effects (wavelet is wide)
+    int n_samples = power[0][0].size();
+    int crop = n_samples / 4; // Crop 25% from each side
+    int len = n_samples - 2 * crop;
+
+    double diff10 = (power[0][0].segment(crop, len) - p10_ref.col(0).segment(crop, len)).norm();
+    qDebug() << "Diff TFR 10Hz (Center):" << diff10;
+    // TFR differences can be slightly larger due to convolution edge effects or precision
+    QVERIFY(diff10 < 1e-3);
+
+    // Verify 20Hz Power
+    MatrixXd p20_ref;
+    QVERIFY(IOUtils::read_eigen_matrix(p20_ref, dataPath + "/tfr_power_20hz.txt"));
+    if (p20_ref.rows() == 1)
+        p20_ref.transposeInPlace();
+
+    double diff20 = (power[0][1].segment(crop, len) - p20_ref.col(0).segment(crop, len)).norm();
+    qDebug() << "Diff TFR 20Hz (Center):" << diff20;
+    QVERIFY(diff20 < 1e-3);
+}
+
+//=============================================================================================================
+
+void TestVerification::verifyPSD()
+{
+    // Load input (transposed to 1xN)
+    MatrixXd input_data = mSignalRaw.transpose();
+    double sfreq = 1000.0;
+    int n_fft = 256;
+
+    // Compute PSD
+    auto res = TFRLIB::PSD::psd_welch(input_data, sfreq, n_fft, 0, n_fft, "hamming");
+
+    MatrixXd psds = res.first;
+    VectorXd freqs = res.second;
+
+    // Verify Freqs
+    MatrixXd freqs_ref_mat;
+    QVERIFY(IOUtils::read_eigen_matrix(freqs_ref_mat, dataPath + "/psd_welch_freqs.txt"));
+    // freqs_ref_mat likely Nx1 or 1xN
+    if (freqs_ref_mat.cols() > 1)
+        freqs_ref_mat.transposeInPlace();
+    VectorXd freqs_ref = freqs_ref_mat.col(0);
+
+    QCOMPARE(freqs.size(), freqs_ref.size());
+    double diff_freqs = (freqs - freqs_ref).norm();
+    qDebug() << "Diff PSD Freqs:" << diff_freqs;
+    QVERIFY(diff_freqs < 1e-5);
+
+    // Verify PSDs
+    MatrixXd psds_ref_mat;
+    QVERIFY(IOUtils::read_eigen_matrix(psds_ref_mat, dataPath + "/psd_welch_psds.txt"));
+    if (psds_ref_mat.cols() > 1)
+        psds_ref_mat.transposeInPlace();
+    VectorXd psds_ref = psds_ref_mat.col(0);
+
+    QCOMPARE(psds.cols(), psds_ref.size());
+
+    // psds is (n_channels x n_freqs) -> (1 x n_freqs)
+    VectorXd psds_calc = psds.row(0);
+
+    double diff_psds = (psds_calc - psds_ref).norm();
+    qDebug() << "Diff PSDs:" << diff_psds;
+    
+    QVERIFY(diff_psds < 5e-4);
 }
 
 //=============================================================================================================

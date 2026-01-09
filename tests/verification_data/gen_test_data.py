@@ -9,6 +9,27 @@ Usage:
 import numpy as np
 import scipy.signal
 import os
+import sys
+
+# Add mne-python to path
+mne_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../mne-python"))
+if os.path.exists(mne_path):
+    sys.path.append(mne_path)
+else:
+    print(f"Warning: mne-python not found at {mne_path}")
+
+try:
+    from mne.time_frequency import tfr_array_morlet, morlet
+except ImportError as e:
+    print(f"Error importing MNE: {e}")
+    # Fallback or exit?
+    # For verification, we strictly need MNE to generate ground truth.
+    # But maybe the user has 'mne' installed in the env separately?
+    try:
+        from mne.time_frequency import tfr_array_morlet, morlet
+    except ImportError:
+        print("Could not import mne. Please ensure mne-python is in the path or installed.")
+        sys.exit(1)
 
 OUTPUT_DIR = "data"
 
@@ -70,6 +91,56 @@ def main():
     win_blackman = np.blackman(n_win)
     save_data("window_blackman_512", win_blackman)
     
+    # 5. Phase 2: TFR
+    print("Generating Phase 2 (TFR) data...")
+    
+    # 5.1 Morlet Wavelet
+    freqs = np.array([10.0, 20.0])
+    n_cycles = 5.0
+    # mne.time_frequency.morlet returns list of arrays (one per freq)
+    Ws = morlet(sfreq, freqs, n_cycles=n_cycles)
+    
+    for i, freq in enumerate(freqs):
+        w = Ws[i]
+        save_data(f"tfr_morlet_w_{int(freq)}hz_real", np.real(w))
+        save_data(f"tfr_morlet_w_{int(freq)}hz_imag", np.imag(w))
+
+    # 5.2 TFR Computation
+    # Input needs to be (n_epochs, n_chans, n_times)
+    data = sig[np.newaxis, np.newaxis, :] # 1 epoch, 1 channel
+    
+    # Compute TFR
+    # output: (n_epochs, n_chans, n_freqs, n_times)
+    power = tfr_array_morlet(data, sfreq, freqs, n_cycles=n_cycles, output='power')
+    
+    # Save power for each freq
+    for i, freq in enumerate(freqs):
+        p = power[0, 0, i, :]
+        save_data(f"tfr_power_{int(freq)}hz", p)
+    
+    # 5.3 PSD Welch
+    try:
+        from mne.time_frequency import psd_array_welch
+    except ImportError:
+        # For older MNE or different structure
+        try:
+            from mne.time_frequency.psd import psd_array_welch
+        except ImportError:
+            print("Could not import psd_array_welch")
+            psd_array_welch = None
+
+    if psd_array_welch is not None:
+        n_fft = 256
+        # n_per_seg default is n_fft
+        # output='power' default
+        psds, freqs_psd = psd_array_welch(data, sfreq=sfreq, fmin=0, fmax=np.inf, 
+                                          n_fft=n_fft, n_overlap=0, n_per_seg=n_fft, 
+                                          average='mean', output='power')
+        # psds: (n_epochs, n_chans, n_freqs)
+        
+        save_data("psd_welch_psds", psds[0, 0, :])
+        save_data("psd_welch_freqs", freqs_psd)
+
     print("Verification data generation complete.")
 
 if __name__ == "__main__":
