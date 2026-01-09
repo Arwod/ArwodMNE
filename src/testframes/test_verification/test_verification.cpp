@@ -31,6 +31,10 @@
 #include <mne/mne_inverse_operator.h>
 #include <mne/mne_sourceestimate.h>
 #include <fiff/fiff_evoked.h>
+#include <connectivity/connectivity.h>
+#include <connectivity/connectivitysettings.h>
+#include <connectivity/network/network.h>
+#include <connectivity/metrics/abstractmetric.h>
 #include <Eigen/Core>
 #include <unsupported/Eigen/FFT>
 #include <iostream>
@@ -80,6 +84,7 @@ private slots:
     void verifyStats();
     void verifyLCMV();
     void verifyMinimumNorm();
+    void verifyConnectivity();
     void cleanupTestCase();
 
 private:
@@ -631,6 +636,98 @@ void TestVerification::verifyMinimumNorm()
     double diff_dspm = (stc_dspm.data - stc_dspm_ref).norm() / stc_dspm_ref.norm();
     qDebug() << "Diff dSPM (Rel Norm):" << diff_dspm;
     QVERIFY(diff_dspm < 0.05);
+}
+
+//=============================================================================================================
+
+void TestVerification::verifyConnectivity()
+{
+    // 1. Load Data
+    // We generated 5 trials: con_trial_0.txt to con_trial_4.txt
+    // Each is 2 x 1000
+    QList<MatrixXd> trials;
+    for(int i = 0; i < 5; ++i) {
+        MatrixXd trial;
+        QVERIFY(IOUtils::read_eigen_matrix(trial, dataPath + QString("/con_trial_%1.txt").arg(i)));
+        QVERIFY(trial.rows() == 2);
+        QVERIFY(trial.cols() == 1000);
+        trials.append(trial);
+    }
+
+    // 2. Setup ConnectivitySettings
+    CONNECTIVITYLIB::ConnectivitySettings settings;
+    settings.setSamplingFrequency(1000);
+    settings.setWindowType("hanning"); // Matches Python generation
+    settings.setConnectivityMethods(QStringList() << "COH" << "PLV" << "PLI");
+    settings.append(trials);
+    
+    // Set frequency range to 9-11 Hz
+    // SFreq=1000, N=1000 (default), Resolution=1Hz.
+    // Bin 9 corresponds to 9Hz.
+    // We want 9, 10, 11 Hz. Start=9, Amount=3.
+    CONNECTIVITYLIB::AbstractMetric::m_iNumberBinStart = 9;
+    CONNECTIVITYLIB::AbstractMetric::m_iNumberBinAmount = 3;
+
+    // 3. Calculate
+    CONNECTIVITYLIB::Connectivity connectivity;
+    QList<CONNECTIVITYLIB::Network> networks = connectivity.calculate(settings);
+    
+    // We expect 3 networks (COH, PLV, PLI)
+    // Note: The order depends on implementation in Connectivity::calculate.
+    // It checks: WPLI, USPLI, COR, XCOR, PLI, COH, IMAGCOH, PLV, DSWPLI.
+    // So order in result list: PLI, COH, PLV.
+    // Wait, let's verify order in connectivity.cpp
+    // 1. WPLI
+    // ...
+    // 5. PLI
+    // 6. COH
+    // 8. PLV
+    // So for input {"COH", "PLV", "PLI"}, result list order is PLI, COH, PLV.
+    
+    QCOMPARE(networks.size(), 3);
+    
+    // Map method name to network
+    QMap<QString, CONNECTIVITYLIB::Network> netMap;
+    for(const auto& net : networks) {
+        netMap.insert(net.getConnectivityMethod(), net);
+    }
+    
+    QVERIFY(netMap.contains("COH"));
+    QVERIFY(netMap.contains("PLV"));
+    QVERIFY(netMap.contains("PLI"));
+
+    // 4. Verify COH
+    {
+        MatrixXd mat = netMap["COH"].getFullConnectivityMatrix();
+        MatrixXd ref;
+        QVERIFY(IOUtils::read_eigen_matrix(ref, dataPath + "/con_res_coh.txt"));
+        
+        double diff = (mat - ref).norm() / ref.norm();
+        qDebug() << "Diff COH:" << diff;
+        QVERIFY(diff < 0.05);
+    }
+
+    // 5. Verify PLV
+    {
+        MatrixXd mat = netMap["PLV"].getFullConnectivityMatrix();
+        MatrixXd ref;
+        QVERIFY(IOUtils::read_eigen_matrix(ref, dataPath + "/con_res_plv.txt"));
+        
+        double diff = (mat - ref).norm() / ref.norm();
+        qDebug() << "Diff PLV:" << diff;
+        QVERIFY(diff < 0.05);
+    }
+
+    // 6. Verify PLI
+    {
+        MatrixXd mat = netMap["PLI"].getFullConnectivityMatrix();
+        MatrixXd ref;
+        QVERIFY(IOUtils::read_eigen_matrix(ref, dataPath + "/con_res_pli.txt"));
+        
+        double diff = (mat - ref).norm() / ref.norm();
+        qDebug() << "Diff PLI:" << diff;
+        QVERIFY(diff < 0.05);
+    }
 }
 
 //=============================================================================================================

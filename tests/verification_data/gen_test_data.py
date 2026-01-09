@@ -371,6 +371,77 @@ def main():
     stc_dspm = apply_inverse(evoked, inv, lambda2=1.0/9.0, method='dSPM')
     save_data("mn_stc_dspm", stc_dspm.data)
 
+    # 10. Connectivity (Phase 7)
+    print("Generating Phase 7 (Connectivity) data...")
+    try:
+        from mne_connectivity import spectral_connectivity_epochs
+    except ImportError:
+        print("mne_connectivity not found. Skipping Phase 7.")
+        spectral_connectivity_epochs = None
+
+    if spectral_connectivity_epochs is not None:
+        # Generate 5 epochs, 2 channels, 1000 samples (1s)
+        n_epochs = 5
+        n_channels = 2
+        n_times = 1000
+        sfreq = 1000
+        
+        data_epochs = np.zeros((n_epochs, n_channels, n_times))
+        t = np.arange(n_times) / sfreq
+        
+        # Chan 1: 10Hz sin
+        # Chan 2: 10Hz cos (pi/2 lag) + small noise
+        # This means constant phase difference of pi/2 across trials -> High PLV, High PLI, High Coherence
+        for i in range(n_epochs):
+            data_epochs[i, 0, :] = np.sin(2 * np.pi * 10 * t)
+            data_epochs[i, 1, :] = np.cos(2 * np.pi * 10 * t) + 0.1 * np.random.randn(n_times)
+            
+            # Save each trial
+            save_data(f"con_trial_{i}", data_epochs[i])
+
+        # Create MNE Epochs
+        info_con = mne.create_info(ch_names=['CH1', 'CH2'], sfreq=sfreq, ch_types='eeg')
+        epochs = mne.EpochsArray(data_epochs, info_con)
+        
+        # Compute Connectivity
+        # C++ implementation uses FFT with Hanning window.
+        # To match, we should apply Hanning window and use mode='fourier' in Python.
+        # Or use mode='multitaper' which is robust.
+        # Let's try to align: C++ uses Hanning window on the whole trial.
+        
+        # Apply Hanning window manually
+        from scipy.signal import get_window
+        window = get_window('hann', n_times)
+        data_epochs_win = data_epochs * window[np.newaxis, np.newaxis, :]
+        
+        epochs_win = mne.EpochsArray(data_epochs_win, info_con)
+        
+        con_methods = ['coh', 'plv', 'pli']
+        # mode='fourier' expects data to be windowed if we want windowing.
+        # We already windowed it.
+        # But wait, 'fourier' mode in mne might expect single epoch?
+        # It averages over epochs.
+        con = spectral_connectivity_epochs(epochs_win, method=con_methods, mode='fourier', 
+                                           sfreq=sfreq, fmin=9, fmax=11, faverage=True, 
+                                           mt_adaptive=False, n_jobs=1)
+        
+        if not isinstance(con, list):
+            con = [con]
+            
+        for method, res in zip(con_methods, con):
+            mat = res.get_data(output='dense')
+            # If shape has extra dims (freqs=1), squeeze
+            if mat.ndim > 2:
+                mat = mat.squeeze()
+            
+            # Symmetrize if strictly lower triangular (mne-connectivity might return this)
+            # Check if upper triangle (k=1) is all zeros and lower triangle (k=-1) is not all zeros
+            if np.all(np.triu(mat, 1) == 0) and not np.all(np.tril(mat, -1) == 0):
+                print(f"Symmetrizing {method} result...")
+                mat = mat + mat.T
+            
+            save_data(f"con_res_{method}", mat)
+
     print("Verification data generation complete.")
 
 if __name__ == "__main__":
