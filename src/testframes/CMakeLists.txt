@@ -48,4 +48,5 @@ add_subdirectory(test_rt_pipeline_integration)
 add_subdirectory(test_decoding)
 add_subdirectory(test_tfr_multitaper)
 add_subdirectory(test_dics)
+add_subdirectory(test_lcmv_cov)
 
