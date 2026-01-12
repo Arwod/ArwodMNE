@@ -9,6 +9,7 @@
 #include <Eigen/Core>
 #include <vector>
 #include <string>
+#include <memory>
 
 //=============================================================================================================
 // DEFINE NAMESPACE DECODINGLIB
