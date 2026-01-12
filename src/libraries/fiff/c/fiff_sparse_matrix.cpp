@@ -402,3 +402,43 @@ out : {
         return res;
     }
 }
+
+//=============================================================================================================
+
+Eigen::SparseMatrix<double> FiffSparseMatrix::toEigenSparse() const
+{
+    if (this->coding == FIFFTS_MC_CCS) {
+        Eigen::SparseMatrix<double, Eigen::ColMajor> mat(this->m, this->n);
+        mat.resizeNonZeros(this->nz);
+        
+        // Copy indices
+        std::memcpy(mat.outerIndexPtr(), this->ptrs, (this->n + 1) * sizeof(int));
+        std::memcpy(mat.innerIndexPtr(), this->inds, this->nz * sizeof(int));
+        
+        // Copy and cast data
+        for(int i = 0; i < this->nz; ++i) {
+            mat.valuePtr()[i] = static_cast<double>(this->data[i]);
+        }
+        
+        return mat;
+    } 
+    else if (this->coding == FIFFTS_MC_RCS) {
+        Eigen::SparseMatrix<double, Eigen::RowMajor> mat(this->m, this->n);
+        mat.resizeNonZeros(this->nz);
+        
+        // Copy indices
+        std::memcpy(mat.outerIndexPtr(), this->ptrs, (this->m + 1) * sizeof(int));
+        std::memcpy(mat.innerIndexPtr(), this->inds, this->nz * sizeof(int));
+        
+        // Copy and cast data
+        for(int i = 0; i < this->nz; ++i) {
+            mat.valuePtr()[i] = static_cast<double>(this->data[i]);
+        }
+        
+        return Eigen::SparseMatrix<double>(mat); // Convert to default ColMajor
+    }
+    else {
+        qWarning() << "FiffSparseMatrix::toEigenSparse - Unknown coding type:" << this->coding;
+        return Eigen::SparseMatrix<double>(this->m, this->n);
+    }
+}
