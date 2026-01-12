@@ -538,6 +538,26 @@ public:
                                       const float& fThreshRot,
                                       const float& fThreshTrans);
 
+    //=========================================================================================================
+    /**
+     * Computes the Ledoit-Wolf optimal shrinkage coefficient.
+     *
+     * @param[in] data     Input data (n_channels x n_samples).
+     * @param[in] assume_centered If true, data is assumed to be centered.
+     * @return             Shrinkage coefficient (0 to 1).
+     */
+    static double ledoit_wolf_shrinkage(const Eigen::MatrixXd& data, bool assume_centered = false);
+
+    //=========================================================================================================
+    /**
+     * Computes the Ledoit-Wolf regularized covariance matrix.
+     *
+     * @param[in] data     Input data (n_channels x n_samples).
+     * @param[in] assume_centered If true, data is assumed to be centered.
+     * @return             Regularized covariance matrix (n_channels x n_channels).
+     */
+    static Eigen::MatrixXd ledoit_wolf(const Eigen::MatrixXd& data, bool assume_centered = false);
+
 };
 
 //=============================================================================================================

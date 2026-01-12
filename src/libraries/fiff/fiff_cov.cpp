@@ -320,6 +320,15 @@ FiffCov FiffCov::prepare_noise_cov(const FiffInfo &p_Info, const QStringList &p_
 
 //=============================================================================================================
 
+void FiffCov::write(QIODevice &p_IODevice)
+{
+    FiffStream::SPtr t_pStream = FiffStream::start_file(p_IODevice);
+    t_pStream->write_cov(*this);
+    t_pStream->end_file();
+}
+
+//=============================================================================================================
+
 FiffCov FiffCov::regularize(const FiffInfo& p_info, double p_fRegMag, double p_fRegGrad, double p_fRegEeg, bool p_bProj, QStringList p_exclude) const
 {
     FiffCov cov(*this);

@@ -261,7 +261,16 @@ bool FiffStream::open(QIODevice::OpenModeFlag mode)
     /*
      * Try to open...
      */
-    if (!this->device()->open(mode))
+    if (this->device()->isOpen()) {
+        if ((mode & QIODevice::ReadOnly) && !this->device()->isReadable()) {
+             qCritical("Device is open but not readable: %s\n", t_sFileName.toUtf8().constData());
+             return false;
+        }
+        if (!this->device()->isSequential()) {
+             this->device()->seek(0);
+        }
+    }
+    else if (!this->device()->open(mode))
     {
         qCritical("Cannot open %s\n", t_sFileName.toUtf8().constData());//consider throw
         return false;
@@ -1930,11 +1939,18 @@ FiffStream::SPtr FiffStream::start_file(QIODevice& p_IODevice)
     FiffStream::SPtr p_pStream(new FiffStream(&p_IODevice));
     QString t_sFileName = p_pStream->streamName();
 
-    if(!p_pStream->device()->open(QIODevice::WriteOnly))
-    {
-        qWarning("Cannot write to %s\n", t_sFileName.toUtf8().constData());//consider throw
-        FiffStream::SPtr p_pEmptyStream;
-        return p_pEmptyStream;
+    if (p_pStream->device()->isOpen()) {
+        if (!p_pStream->device()->isWritable()) {
+             qWarning("Device is open but not writable: %s\n", t_sFileName.toUtf8().constData());
+             return FiffStream::SPtr();
+        }
+    } else {
+        if(!p_pStream->device()->open(QIODevice::WriteOnly))
+        {
+            qWarning("Cannot write to %s\n", t_sFileName.toUtf8().constData());//consider throw
+            FiffStream::SPtr p_pEmptyStream;
+            return p_pEmptyStream;
+        }
     }
 
     //
@@ -2417,13 +2433,16 @@ fiff_long_t FiffStream::write_cov(const FiffCov &p_FiffCov)
 //        {
             // Store only lower part of covariance matrix
             qint32 dim = p_FiffCov.dim;
-            qint32 n = ((dim*dim) - dim)/2;
+            qint32 n = ((dim*dim) + dim)/2;
 
             VectorXd vals(n);
             qint32 count = 0;
-            for(qint32 i = 1; i < dim; ++i)
-                for(qint32 j = 0; j < i; ++j)
+            for(qint32 i = 0; i < dim; ++i)
+                for(qint32 j = 0; j <= i; ++j)
+                {
                     vals(count) = p_FiffCov.data(i,j);
+                    ++count;
+                }
 
             this->write_double(FIFF_MNE_COV, vals.data(), vals.size());
 //        }
@@ -3189,6 +3208,7 @@ QList<FiffDirEntry::SPtr> FiffStream::make_dir(bool *ok)
     if(!this->device()->seek(SEEK_SET))
         return dir;
     while ((pos = this->read_tag_info(t_pTag)) != -1) {
+        if (t_pTag->kind == 0) break;
         /*
         * Check that we haven't run into the directory
         */
