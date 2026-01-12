@@ -51,4 +51,5 @@ add_subdirectory(test_dics)
 add_subdirectory(test_lcmv_cov)
 add_subdirectory(test_connectivity)
 add_subdirectory(test_morphing)
+add_subdirectory(test_stats)
 
