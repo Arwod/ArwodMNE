@@ -2,6 +2,8 @@
 #include <cmath>
 #include <iostream>
 #include <complex>
+#include <Eigen/Eigenvalues>
+#include <algorithm>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -27,8 +29,8 @@ std::vector<Eigen::VectorXcd> TFRUtils::morlet(double sfreq,
         } else {
             // MNE logic: sigma_t = this_n_cycles / (2.0 * np.pi * sigma)
             // But wait, in MNE python:
-            // if sigma is None: sigma_t = n_cycles / (2*pi*f)
-            // else: sigma_t = n_cycles / (2*pi*sigma)
+            // if sigma is None: sigma_t = n_cycles / (2.0 * np.pi * f)
+            // else: sigma_t = n_cycles / (2.0 * np.pi * sigma)
             // This seems to imply 'sigma' parameter in MNE is not 'sigma_t' directly but some scaling factor?
             // Doc says: "sigma : float, default None. It controls the width of the wavelet ie its temporal resolution."
             // "If sigma is fixed the temporal resolution is fixed like for STFT and number of oscillations increases with frequency."
@@ -117,6 +119,71 @@ std::vector<Eigen::VectorXcd> TFRUtils::morlet(double sfreq,
     }
 
     return wavelets;
+}
+
+std::pair<Eigen::MatrixXd, Eigen::VectorXd> TFRUtils::dpss_windows(int N, double nw, int k_max)
+{
+    // Implementation based on Slepian (1978) tridiagonal matrix approximation
+    
+    double W = nw / (double)N;
+    int n = N;
+    Eigen::MatrixXd T = Eigen::MatrixXd::Zero(n, n);
+    
+    // Construct Tridiagonal Matrix
+    // Diagonal
+    for (int k = 0; k < n; ++k) {
+        double val = std::pow((n - 1) / 2.0, 2) - std::pow(k - (n - 1) / 2.0, 2);
+        T(k, k) = val * std::cos(2.0 * M_PI * W);
+    }
+    
+    // Off-diagonal
+    for (int k = 0; k < n - 1; ++k) {
+        double val = 0.5 * (k + 1) * (n - 1 - k);
+        T(k, k+1) = val;
+        T(k+1, k) = val;
+    }
+    
+    // Eigen decomposition
+    // Use SelfAdjointEigenSolver for symmetric matrix
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(T);
+    
+    // Eigen returns eigenvalues in ascending order
+    // We want the largest eigenvalues (last ones)
+    
+    Eigen::MatrixXd all_vecs = es.eigenvectors(); // Columns are eigenvectors
+    Eigen::VectorXd all_vals = es.eigenvalues();
+    
+    if (k_max > n) k_max = n;
+    if (k_max < 1) k_max = 1;
+    
+    Eigen::MatrixXd windows(n, k_max);
+    Eigen::VectorXd eigen_vals(k_max);
+    
+    for (int i = 0; i < k_max; ++i) {
+        // Take from end (largest eigenvalue)
+        int idx = n - 1 - i;
+        Eigen::VectorXd w = all_vecs.col(idx);
+        
+        // Fix sign convention
+        // Force the peak to be positive
+        int max_idx = 0;
+        double max_val = 0.0;
+        for(int j=0; j<n; ++j) {
+            if (std::abs(w[j]) > max_val) {
+                max_val = std::abs(w[j]);
+                max_idx = j;
+            }
+        }
+        
+        if (w[max_idx] < 0) {
+            w = -w;
+        }
+        
+        windows.col(i) = w;
+        eigen_vals[i] = all_vals[idx];
+    }
+    
+    return std::make_pair(windows, eigen_vals);
 }
 
 } // NAMESPACE

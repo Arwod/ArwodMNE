@@ -46,4 +46,5 @@ add_subdirectory(test_edf2fiff_rwr)
 add_subdirectory(test_verification)
 add_subdirectory(test_rt_pipeline_integration)
 add_subdirectory(test_decoding)
+add_subdirectory(test_tfr_multitaper)
 

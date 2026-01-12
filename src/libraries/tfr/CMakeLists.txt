@@ -15,6 +15,7 @@ set(SOURCES
     tfr_compute.cpp
     timefrequency.cpp
     psd.cpp
+    csd.cpp
 )
 
 set(HEADERS
@@ -23,6 +24,7 @@ set(HEADERS
     tfr_compute.h
     timefrequency.h
     psd.h
+    csd.h
 )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})

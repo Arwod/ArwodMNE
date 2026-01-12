@@ -27,6 +27,16 @@ public:
                                                 double sigma = 0.0,
                                                 bool zero_mean = false);
 
+    /**
+     * Creates DPSS (Slepian) windows.
+     *
+     * @param[in] N     Sequence length.
+     * @param[in] nw    Time-bandwidth product.
+     * @param[in] k_max Number of windows to return.
+     * @return          Pair of (Windows [N x k_max], Eigenvalues [k_max]).
+     */
+    static std::pair<Eigen::MatrixXd, Eigen::VectorXd> dpss_windows(int N, double nw, int k_max);
+
 };
 
 } // NAMESPACE
