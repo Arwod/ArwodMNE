@@ -45,4 +45,5 @@ add_subdirectory(test_mne_anonymize)
 add_subdirectory(test_edf2fiff_rwr)
 add_subdirectory(test_verification)
 add_subdirectory(test_rt_pipeline_integration)
+add_subdirectory(test_decoding)
 
