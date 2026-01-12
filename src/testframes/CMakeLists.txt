@@ -49,4 +49,5 @@ add_subdirectory(test_decoding)
 add_subdirectory(test_tfr_multitaper)
 add_subdirectory(test_dics)
 add_subdirectory(test_lcmv_cov)
+add_subdirectory(test_connectivity)
 

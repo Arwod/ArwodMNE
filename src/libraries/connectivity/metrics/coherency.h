@@ -45,7 +45,7 @@
 
 #include "../connectivity_global.h"
 
-#include "abstractmetric.h"
+#include "abstractspectralmetric.h"
 #include "../connectivitysettings.h"
 
 //=============================================================================================================
@@ -83,7 +83,7 @@ class Network;
  *
  * @brief This class computes the coherency connectivity metric.
  */
-class CONNECTIVITYSHARED_EXPORT Coherency : public AbstractMetric
+class CONNECTIVITYSHARED_EXPORT Coherency : public AbstractSpectralMetric
 {
 
 public:
@@ -137,7 +137,7 @@ private:
                         int iNRows,
                         int iNFreqs,
                         int iNfft,
-                        const QPair<Eigen::MatrixXd, Eigen::VectorXd>& tapers);
+                        const std::pair<Eigen::MatrixXd, Eigen::VectorXd>& tapers);
 
     //=========================================================================================================
     /**

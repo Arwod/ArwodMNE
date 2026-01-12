@@ -1,0 +1,45 @@
+cmake_minimum_required(VERSION 3.14)
+project(test_connectivity LANGUAGES CXX)
+
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+
+set(QT_REQUIRED_COMPONENTS Core Test Concurrent)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
+
+set(SOURCES
+    test_connectivity.cpp
+)
+
+if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
+    qt_add_executable(${PROJECT_NAME} MANUAL_FINALIZATION ${SOURCES})
+else()
+    add_executable(${PROJECT_NAME} ${SOURCES})
+endif()
+
+set(QT_REQUIRED_COMPONENT_LIBS ${QT_REQUIRED_COMPONENTS})
+list(TRANSFORM QT_REQUIRED_COMPONENT_LIBS PREPEND "Qt${QT_VERSION_MAJOR}::")
+
+set(MNE_LIBS_REQUIRED 
+  mne_utils
+  mne_connectivity
+  mne_fs
+  mne_mne
+  mne_tfr
+)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  ${QT_REQUIRED_COMPONENT_LIBS}
+  ${MNE_LIBS_REQUIRED}
+  eigen
+)
+
+if(QT_VERSION_MAJOR EQUAL 6)
+    qt_finalize_executable(${PROJECT_NAME})
+endif()
+
+if(NOT BUILD_SHARED_LIBS)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE STATICBUILD)
+endif()
