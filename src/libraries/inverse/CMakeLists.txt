@@ -17,6 +17,7 @@ set(SOURCES
     inverse_global.cpp
     beamformer/covariance.cpp
     beamformer/lcmv.cpp
+    beamformer/dics.cpp
     minimumNorm/minimumnorm.cpp
     rapMusic/rapmusic.cpp
     rapMusic/pwlrapmusic.cpp
@@ -44,6 +45,7 @@ set(HEADERS
     IInverseAlgorithm.h
     beamformer/covariance.h
     beamformer/lcmv.h
+    beamformer/dics.h
     minimumNorm/minimumnorm.h
     rapMusic/rapmusic.h
     rapMusic/pwlrapmusic.h
@@ -96,6 +98,7 @@ list(TRANSFORM QT_REQUIRED_COMPONENT_LIBS PREPEND "Qt${QT_VERSION_MAJOR}::")
 set(MNE_LIBS_REQUIRED 
     mne_utils
     mne_fiff
+    mne_tfr
     mne_fs
     mne_mne
     mne_fwd
