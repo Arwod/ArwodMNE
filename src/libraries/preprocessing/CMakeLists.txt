@@ -12,6 +12,7 @@ set(SOURCES
     ica.cpp
     infomax.cpp
     picard.cpp
+    artifact_detection.cpp
 )
 
 set(HEADERS
@@ -21,6 +22,7 @@ set(HEADERS
     ica.h
     infomax.h
     picard.h
+    artifact_detection.h
 )
 
 # Create the library
