@@ -14,6 +14,7 @@ set(MNE_LIBRARY_SOURCES
     stats_global.cpp
     statistics.cpp
     clusterpermutation.cpp
+    correction.cpp
 )
 
 # Define the header files
@@ -21,6 +22,7 @@ set(MNE_LIBRARY_HEADERS
     stats_global.h
     statistics.h
     clusterpermutation.h
+    correction.h
 )
 
 # Create the library
