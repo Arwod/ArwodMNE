@@ -13,6 +13,7 @@ set(SOURCES
     infomax.cpp
     picard.cpp
     artifact_detection.cpp
+    ecg_eog_processing.cpp
 )
 
 set(HEADERS
@@ -23,6 +24,7 @@ set(HEADERS
     infomax.h
     picard.h
     artifact_detection.h
+    ecg_eog_processing.h
 )
 
 # Create the library
