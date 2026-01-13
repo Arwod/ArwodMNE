@@ -28,6 +28,7 @@ set(SOURCES
   spectral.cpp
   mnetracer.cpp
   utils_global.cpp
+  mne_core_types.cpp
 )
 
 set(HEADERS
@@ -50,6 +51,7 @@ set(HEADERS
   generics/applicationlogger.h
   spectral.h
   mnetracer.h
+  mne_core_types.h
 )
 
 set(FILE_TO_UPDATE utils_global.cpp)
