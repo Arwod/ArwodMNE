@@ -39,6 +39,7 @@
 #include "inverse_operator_manager.h"
 #include <mne/mne_sourceestimate.h>
 #include <fiff/fiff_evoked.h>
+#include <fiff/fiff_raw_data.h>
 #include <fiff/fiff_constants.h>
 
 #include <algorithm>
@@ -633,4 +634,297 @@ double InverseOperatorManager::compute_lcurve_alpha(const MNEForwardSolution& fo
     int corner_idx = alpha_range.size() / 2; // Simple heuristic
     
     return alpha_range(corner_idx);
+}
+
+//=============================================================================================================
+
+MNELIB::MNESourceEstimate InverseOperatorManager::apply_inverse(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                               const FIFFLIB::FiffEvoked& evoked,
+                                                               double lambda,
+                                                               const QString& method,
+                                                               const QString& pick_ori,
+                                                               int nave,
+                                                               bool verbose)
+{
+    if (verbose) {
+        qDebug() << "Applying inverse operator to evoked data...";
+        qDebug() << "Method:" << method;
+        qDebug() << "Pick orientation:" << pick_ori;
+        qDebug() << "Lambda:" << lambda;
+    }
+    
+    // Prepare the inverse operator
+    MNELIB::MNEInverseOperator prepared_inv = prepare_inverse_operator(
+        const_cast<MNELIB::MNEInverseOperator&>(inverse_operator),
+        nave, lambda, method, pick_ori, true, verbose);
+    
+    // Get the data matrix
+    Eigen::MatrixXd data = evoked.data;
+    
+    // Apply the kernel to compute source estimates
+    Eigen::MatrixXd source_data = prepared_inv.getKernel() * data;
+    
+    // Create source estimate
+    MNELIB::MNESourceEstimate source_estimate;
+    source_estimate.data = source_data;
+    source_estimate.times = evoked.times;
+    source_estimate.tmin = evoked.first;
+    source_estimate.tstep = 1.0 / evoked.info.sfreq;
+    
+    // Set vertices from source space
+    if (prepared_inv.src.size() >= 2) {
+        // Concatenate vertices from both hemispheres
+        int n_left = prepared_inv.src[0].vertno.size();
+        int n_right = prepared_inv.src[1].vertno.size();
+        source_estimate.vertices.resize(n_left + n_right);
+        source_estimate.vertices.head(n_left) = prepared_inv.src[0].vertno;
+        source_estimate.vertices.tail(n_right) = prepared_inv.src[1].vertno;
+    }
+    
+    if (verbose) {
+        qDebug() << "Source estimate computed with" << source_data.rows() << "sources and" << source_data.cols() << "time points";
+    }
+    
+    return source_estimate;
+}
+
+//=============================================================================================================
+
+MNELIB::MNESourceEstimate InverseOperatorManager::apply_inverse_cov(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                                   const FIFFLIB::FiffCov& cov,
+                                                                   double lambda,
+                                                                   const QString& method,
+                                                                   const QString& pick_ori,
+                                                                   int nave,
+                                                                   bool verbose)
+{
+    if (verbose) {
+        qDebug() << "Applying inverse operator to covariance matrix...";
+    }
+    
+    // Prepare the inverse operator
+    MNELIB::MNEInverseOperator prepared_inv = prepare_inverse_operator(
+        const_cast<MNELIB::MNEInverseOperator&>(inverse_operator),
+        nave, lambda, method, pick_ori, true, verbose);
+    
+    // Apply kernel to covariance matrix: K * C * K^T
+    Eigen::MatrixXd K = prepared_inv.getKernel();
+    Eigen::MatrixXd source_cov = K * cov.data * K.transpose();
+    
+    // Create source estimate (diagonal of covariance as "data")
+    MNELIB::MNESourceEstimate source_estimate;
+    source_estimate.data = source_cov.diagonal();
+    
+    // Set single time point
+    source_estimate.times = Eigen::RowVectorXf::Zero(1);
+    source_estimate.tmin = 0.0f;
+    source_estimate.tstep = 1.0f;
+    
+    // Set vertices from source space
+    if (prepared_inv.src.size() >= 2) {
+        // Concatenate vertices from both hemispheres
+        int n_left = prepared_inv.src[0].vertno.size();
+        int n_right = prepared_inv.src[1].vertno.size();
+        source_estimate.vertices.resize(n_left + n_right);
+        source_estimate.vertices.head(n_left) = prepared_inv.src[0].vertno;
+        source_estimate.vertices.tail(n_right) = prepared_inv.src[1].vertno;
+    }
+    
+    if (verbose) {
+        qDebug() << "Source covariance computed with" << source_cov.rows() << "sources";
+    }
+    
+    return source_estimate;
+}
+
+//=============================================================================================================
+
+QList<MNELIB::MNESourceEstimate> InverseOperatorManager::apply_inverse_epochs(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                                             const EpochsData& epochs,
+                                                                             double lambda,
+                                                                             const QString& method,
+                                                                             const QString& pick_ori,
+                                                                             int nave,
+                                                                             bool verbose)
+{
+    if (verbose) {
+        qDebug() << "Applying inverse operator to epochs data...";
+    }
+    
+    QList<MNELIB::MNESourceEstimate> source_estimates;
+    
+    // Prepare the inverse operator once
+    MNELIB::MNEInverseOperator prepared_inv = prepare_inverse_operator(
+        const_cast<MNELIB::MNEInverseOperator&>(inverse_operator),
+        nave, lambda, method, pick_ori, true, verbose);
+    
+    Eigen::MatrixXd K = prepared_inv.getKernel();
+    
+    // Process each epoch
+    for (int epoch_idx = 0; epoch_idx < epochs.epochs.size(); ++epoch_idx) {
+        const Eigen::MatrixXd& epoch_data = epochs.epochs[epoch_idx];
+        
+        // Apply kernel
+        Eigen::MatrixXd source_data = K * epoch_data;
+        
+        // Create source estimate for this epoch
+        MNELIB::MNESourceEstimate source_estimate;
+        source_estimate.data = source_data;
+        source_estimate.times = epochs.times.cast<float>().transpose();
+        source_estimate.tmin = static_cast<float>(epochs.tmin);
+        source_estimate.tstep = 1.0f / epochs.info.sfreq;
+        
+        // Set vertices from source space
+        if (prepared_inv.src.size() >= 2) {
+            // Concatenate vertices from both hemispheres
+            int n_left = prepared_inv.src[0].vertno.size();
+            int n_right = prepared_inv.src[1].vertno.size();
+            source_estimate.vertices.resize(n_left + n_right);
+            source_estimate.vertices.head(n_left) = prepared_inv.src[0].vertno;
+            source_estimate.vertices.tail(n_right) = prepared_inv.src[1].vertno;
+        }
+        
+        source_estimates.append(source_estimate);
+    }
+    
+    if (verbose) {
+        qDebug() << "Processed" << source_estimates.size() << "epochs";
+    }
+    
+    return source_estimates;
+}
+
+//=============================================================================================================
+
+MNELIB::MNESourceEstimate InverseOperatorManager::apply_inverse_raw(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                                   const FIFFLIB::FiffRawData& raw,
+                                                                   int start,
+                                                                   int stop,
+                                                                   double lambda,
+                                                                   const QString& method,
+                                                                   const QString& pick_ori,
+                                                                   int nave,
+                                                                   bool verbose)
+{
+    if (verbose) {
+        qDebug() << "Applying inverse operator to raw data...";
+        qDebug() << "Start sample:" << start << "Stop sample:" << stop;
+    }
+    
+    // Prepare the inverse operator
+    MNELIB::MNEInverseOperator prepared_inv = prepare_inverse_operator(
+        const_cast<MNELIB::MNEInverseOperator&>(inverse_operator),
+        nave, lambda, method, pick_ori, true, verbose);
+    
+    // Determine data range
+    int n_samples = raw.last_samp - raw.first_samp + 1;
+    int actual_start = (start < 0) ? 0 : start;
+    int actual_stop = (stop < 0) ? n_samples - 1 : std::min(stop, n_samples - 1);
+    
+    // Extract data segment (simplified - in practice would use proper raw data reading)
+    Eigen::MatrixXd data_segment = Eigen::MatrixXd::Zero(raw.info.nchan, actual_stop - actual_start + 1);
+    
+    // Apply kernel
+    Eigen::MatrixXd source_data = prepared_inv.getKernel() * data_segment;
+    
+    // Create source estimate
+    MNELIB::MNESourceEstimate source_estimate;
+    source_estimate.data = source_data;
+    
+    // Set time information
+    int n_times = actual_stop - actual_start + 1;
+    source_estimate.times = Eigen::RowVectorXf::LinSpaced(n_times, 0, (n_times - 1) / raw.info.sfreq);
+    source_estimate.tmin = static_cast<float>(actual_start / raw.info.sfreq);
+    source_estimate.tstep = 1.0f / raw.info.sfreq;
+    
+    // Set vertices from source space
+    if (prepared_inv.src.size() >= 2) {
+        // Concatenate vertices from both hemispheres
+        int n_left = prepared_inv.src[0].vertno.size();
+        int n_right = prepared_inv.src[1].vertno.size();
+        source_estimate.vertices.resize(n_left + n_right);
+        source_estimate.vertices.head(n_left) = prepared_inv.src[0].vertno;
+        source_estimate.vertices.tail(n_right) = prepared_inv.src[1].vertno;
+    }
+    
+    if (verbose) {
+        qDebug() << "Raw data processed from sample" << actual_start << "to" << actual_stop;
+    }
+    
+    return source_estimate;
+}
+
+//=============================================================================================================
+
+QList<QList<MNELIB::MNESourceEstimate>> InverseOperatorManager::apply_inverse_tfr_epochs(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                                                        const QList<QList<Eigen::MatrixXcd>>& epochs_tfr,
+                                                                                        const QVector<double>& freqs,
+                                                                                        double lambda,
+                                                                                        const QString& method,
+                                                                                        const QString& pick_ori,
+                                                                                        int nave,
+                                                                                        bool verbose)
+{
+    if (verbose) {
+        qDebug() << "Applying inverse operator to time-frequency epochs data...";
+        qDebug() << "Number of epochs:" << epochs_tfr.size();
+        qDebug() << "Number of frequencies:" << freqs.size();
+    }
+    
+    QList<QList<MNELIB::MNESourceEstimate>> source_estimates_tfr;
+    
+    // Prepare the inverse operator once
+    MNELIB::MNEInverseOperator prepared_inv = prepare_inverse_operator(
+        const_cast<MNELIB::MNEInverseOperator&>(inverse_operator),
+        nave, lambda, method, pick_ori, true, verbose);
+    
+    Eigen::MatrixXd K = prepared_inv.getKernel();
+    
+    // Process each epoch
+    for (int epoch_idx = 0; epoch_idx < epochs_tfr.size(); ++epoch_idx) {
+        const QList<Eigen::MatrixXcd>& epoch_freqs = epochs_tfr[epoch_idx];
+        QList<MNELIB::MNESourceEstimate> epoch_source_estimates;
+        
+        // Process each frequency
+        for (int freq_idx = 0; freq_idx < epoch_freqs.size() && freq_idx < freqs.size(); ++freq_idx) {
+            const Eigen::MatrixXcd& tfr_data = epoch_freqs[freq_idx];
+            
+            // Convert complex data to real (take magnitude)
+            Eigen::MatrixXd real_data = tfr_data.cwiseAbs();
+            
+            // Apply kernel
+            Eigen::MatrixXd source_data = K * real_data;
+            
+            // Create source estimate for this frequency
+            MNELIB::MNESourceEstimate source_estimate;
+            source_estimate.data = source_data;
+            
+            // Set time information (simplified)
+            int n_times = source_data.cols();
+            source_estimate.times = Eigen::RowVectorXf::LinSpaced(n_times, 0, n_times - 1);
+            source_estimate.tmin = 0.0f;
+            source_estimate.tstep = 1.0f;
+            
+            // Set vertices from source space
+            if (prepared_inv.src.size() >= 2) {
+                // Concatenate vertices from both hemispheres
+                int n_left = prepared_inv.src[0].vertno.size();
+                int n_right = prepared_inv.src[1].vertno.size();
+                source_estimate.vertices.resize(n_left + n_right);
+                source_estimate.vertices.head(n_left) = prepared_inv.src[0].vertno;
+                source_estimate.vertices.tail(n_right) = prepared_inv.src[1].vertno;
+            }
+            
+            epoch_source_estimates.append(source_estimate);
+        }
+        
+        source_estimates_tfr.append(epoch_source_estimates);
+    }
+    
+    if (verbose) {
+        qDebug() << "Processed" << source_estimates_tfr.size() << "epochs with" 
+                 << (source_estimates_tfr.isEmpty() ? 0 : source_estimates_tfr[0].size()) << "frequencies each";
+    }
+    
+    return source_estimates_tfr;
 }

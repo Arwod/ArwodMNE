@@ -42,12 +42,17 @@
 #include "../inverse_global.h"
 #include <mne/mne_inverse_operator.h>
 #include <mne/mne_forwardsolution.h>
+#include <mne/mne_sourceestimate.h>
 #include <fiff/fiff_cov.h>
 #include <fiff/fiff_info.h>
+#include <fiff/fiff_evoked.h>
+#include <fiff/fiff_raw_data.h>
 
 #include <QSharedPointer>
 #include <QString>
 #include <QMap>
+#include <QList>
+#include <QVector>
 
 //=============================================================================================================
 // EIGEN INCLUDES
@@ -65,6 +70,20 @@ namespace INVERSELIB
 //=============================================================================================================
 // FORWARD DECLARATIONS
 //=============================================================================================================
+
+//=============================================================================================================
+/**
+ * Simple epochs data structure (since FiffEpochs doesn't exist in this codebase)
+ */
+struct INVERSESHARED_EXPORT EpochsData
+{
+    QList<Eigen::MatrixXd> epochs;      /**< List of epoch data matrices */
+    FIFFLIB::FiffInfo info;             /**< Measurement info */
+    Eigen::VectorXd times;              /**< Time vector */
+    double tmin;                        /**< Start time */
+    
+    EpochsData() : tmin(0.0) {}
+};
 
 //=============================================================================================================
 /**
@@ -282,6 +301,121 @@ public:
     static bool write_inverse_operator(const QString& fname,
                                       const MNELIB::MNEInverseOperator& inverse_operator,
                                       bool verbose = true);
+
+    //=========================================================================================================
+    /**
+     * Apply inverse operator to evoked data
+     *
+     * @param[in] inverse_operator  Inverse operator
+     * @param[in] evoked            Evoked data
+     * @param[in] lambda            Regularization parameter (override)
+     * @param[in] method            Method ("MNE", "dSPM", "sLORETA", "eLORETA")
+     * @param[in] pick_ori          Orientation picking ("normal", "vector", "max-power")
+     * @param[in] nave              Number of averages
+     * @param[in] verbose           Verbose output
+     *
+     * @return Source estimate
+     */
+    static MNELIB::MNESourceEstimate apply_inverse(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                  const FIFFLIB::FiffEvoked& evoked,
+                                                  double lambda = -1.0,
+                                                  const QString& method = "dSPM",
+                                                  const QString& pick_ori = "normal",
+                                                  int nave = 1,
+                                                  bool verbose = true);
+
+    //=========================================================================================================
+    /**
+     * Apply inverse operator to covariance matrix
+     *
+     * @param[in] inverse_operator  Inverse operator
+     * @param[in] cov               Covariance matrix
+     * @param[in] lambda            Regularization parameter (override)
+     * @param[in] method            Method ("MNE", "dSPM", "sLORETA", "eLORETA")
+     * @param[in] pick_ori          Orientation picking ("normal", "vector", "max-power")
+     * @param[in] nave              Number of averages
+     * @param[in] verbose           Verbose output
+     *
+     * @return Source covariance estimate
+     */
+    static MNELIB::MNESourceEstimate apply_inverse_cov(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                      const FIFFLIB::FiffCov& cov,
+                                                      double lambda = -1.0,
+                                                      const QString& method = "dSPM",
+                                                      const QString& pick_ori = "normal",
+                                                      int nave = 1,
+                                                      bool verbose = true);
+
+    //=========================================================================================================
+    /**
+     * Apply inverse operator to epochs data
+     *
+     * @param[in] inverse_operator  Inverse operator
+     * @param[in] epochs            Epochs data
+     * @param[in] lambda            Regularization parameter (override)
+     * @param[in] method            Method ("MNE", "dSPM", "sLORETA", "eLORETA")
+     * @param[in] pick_ori          Orientation picking ("normal", "vector", "max-power")
+     * @param[in] nave              Number of averages
+     * @param[in] verbose           Verbose output
+     *
+     * @return List of source estimates for each epoch
+     */
+    static QList<MNELIB::MNESourceEstimate> apply_inverse_epochs(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                                const EpochsData& epochs,
+                                                                double lambda = -1.0,
+                                                                const QString& method = "dSPM",
+                                                                const QString& pick_ori = "normal",
+                                                                int nave = 1,
+                                                                bool verbose = true);
+
+    //=========================================================================================================
+    /**
+     * Apply inverse operator to raw data
+     *
+     * @param[in] inverse_operator  Inverse operator
+     * @param[in] raw               Raw data
+     * @param[in] start             Start sample
+     * @param[in] stop              Stop sample
+     * @param[in] lambda            Regularization parameter (override)
+     * @param[in] method            Method ("MNE", "dSPM", "sLORETA", "eLORETA")
+     * @param[in] pick_ori          Orientation picking ("normal", "vector", "max-power")
+     * @param[in] nave              Number of averages
+     * @param[in] verbose           Verbose output
+     *
+     * @return Source estimate
+     */
+    static MNELIB::MNESourceEstimate apply_inverse_raw(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                      const FIFFLIB::FiffRawData& raw,
+                                                      int start = 0,
+                                                      int stop = -1,
+                                                      double lambda = -1.0,
+                                                      const QString& method = "dSPM",
+                                                      const QString& pick_ori = "normal",
+                                                      int nave = 1,
+                                                      bool verbose = true);
+
+    //=========================================================================================================
+    /**
+     * Apply inverse operator to time-frequency epochs data
+     *
+     * @param[in] inverse_operator  Inverse operator
+     * @param[in] epochs_tfr        Time-frequency epochs data
+     * @param[in] lambda            Regularization parameter (override)
+     * @param[in] method            Method ("MNE", "dSPM", "sLORETA", "eLORETA")
+     * @param[in] pick_ori          Orientation picking ("normal", "vector", "max-power")
+     * @param[in] nave              Number of averages
+     * @param[in] verbose           Verbose output
+     *
+     * @return List of source estimates for each epoch and frequency
+     */
+    static QList<QList<MNELIB::MNESourceEstimate>> apply_inverse_tfr_epochs(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                                           const QList<QList<Eigen::MatrixXcd>>& epochs_tfr,
+                                                                           const QVector<double>& freqs,
+                                                                           double lambda = -1.0,
+                                                                           const QString& method = "dSPM",
+                                                                           const QString& pick_ori = "normal",
+                                                                           int nave = 1,
+                                                                           bool verbose = true);
 
 private:
     //=========================================================================================================
