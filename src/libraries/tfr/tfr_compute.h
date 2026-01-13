@@ -70,6 +70,26 @@ public:
                                                                      bool use_fft = true,
                                                                      const std::string& output = "complex",
                                                                      int decim = 1);
+
+    /**
+     * Compute Time-Frequency Representation using Stockwell transform.
+     *
+     * @param[in] data      Input data (n_channels x n_times).
+     * @param[in] sfreq     Sampling frequency.
+     * @param[in] fmin      Minimum frequency (default 0).
+     * @param[in] fmax      Maximum frequency (default sfreq/2).
+     * @param[in] n_fft     FFT length (default data.cols()).
+     * @param[in] width     Width parameter for Gaussian window (default 1.0).
+     * @param[in] decim     Decimation factor (default 1).
+     * @return              TFR data (n_channels x n_freqs x n_times).
+     */
+    static std::vector<std::vector<Eigen::VectorXcd>> tfr_stockwell(const Eigen::MatrixXd& data,
+                                                                    double sfreq,
+                                                                    double fmin = 0.0,
+                                                                    double fmax = -1.0,
+                                                                    int n_fft = -1,
+                                                                    double width = 1.0,
+                                                                    int decim = 1);
 };
 
 } // NAMESPACE
