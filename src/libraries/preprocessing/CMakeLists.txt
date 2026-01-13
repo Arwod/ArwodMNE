@@ -10,6 +10,8 @@ set(SOURCES
     pca.cpp
     fastica.cpp
     ica.cpp
+    infomax.cpp
+    picard.cpp
 )
 
 set(HEADERS
@@ -17,6 +19,8 @@ set(HEADERS
     pca.h
     fastica.h
     ica.h
+    infomax.h
+    picard.h
 )
 
 # Create the library
