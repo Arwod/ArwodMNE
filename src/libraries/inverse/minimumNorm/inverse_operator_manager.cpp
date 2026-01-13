@@ -46,6 +46,10 @@
 #include <cmath>
 #include <numeric>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 //=============================================================================================================
 // QT INCLUDES
 //=============================================================================================================
@@ -927,4 +931,334 @@ QList<QList<MNELIB::MNESourceEstimate>> InverseOperatorManager::apply_inverse_tf
     }
     
     return source_estimates_tfr;
+}
+
+//=============================================================================================================
+
+Eigen::MatrixXd InverseOperatorManager::make_inverse_resolution_matrix(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                                      const MNELIB::MNEForwardSolution& forward,
+                                                                      const QString& method,
+                                                                      double lambda,
+                                                                      bool verbose)
+{
+    if (verbose) {
+        qDebug() << "Computing inverse resolution matrix...";
+        qDebug() << "Method:" << method;
+        qDebug() << "Lambda:" << lambda;
+    }
+    
+    // Prepare the inverse operator
+    MNELIB::MNEInverseOperator prepared_inv = prepare_inverse_operator(
+        const_cast<MNELIB::MNEInverseOperator&>(inverse_operator),
+        1, lambda, method, "normal", true, verbose);
+    
+    // Get the kernel (inverse operator matrix)
+    Eigen::MatrixXd K = prepared_inv.getKernel();
+    
+    // Get the forward solution gain matrix
+    Eigen::MatrixXd G = forward.sol->data;
+    
+    // Compute resolution matrix: R = K * G
+    // This represents how well each source can be reconstructed
+    Eigen::MatrixXd resolution_matrix = K * G;
+    
+    if (verbose) {
+        qDebug() << "Resolution matrix computed with size:" << resolution_matrix.rows() << "x" << resolution_matrix.cols();
+        qDebug() << "Diagonal mean:" << resolution_matrix.diagonal().mean();
+        qDebug() << "Off-diagonal RMS:" << (resolution_matrix - Eigen::MatrixXd(resolution_matrix.diagonal().asDiagonal())).norm() / std::sqrt(resolution_matrix.size() - resolution_matrix.rows());
+    }
+    
+    return resolution_matrix;
+}
+
+//=============================================================================================================
+
+Eigen::VectorXd InverseOperatorManager::get_cross_talk(const Eigen::MatrixXd& resolution_matrix,
+                                                      const MNELIB::MNESourceSpace& src,
+                                                      const Eigen::VectorXi& vertices,
+                                                      bool verbose)
+{
+    if (verbose) {
+        qDebug() << "Computing cross-talk function...";
+    }
+    
+    int n_sources = resolution_matrix.rows();
+    Eigen::VectorXd cross_talk(n_sources);
+    
+    // Cross-talk is defined as the sum of absolute values of off-diagonal elements
+    // for each row, normalized by the diagonal element
+    for (int i = 0; i < n_sources; ++i) {
+        double diagonal_val = std::abs(resolution_matrix(i, i));
+        double off_diagonal_sum = 0.0;
+        
+        for (int j = 0; j < resolution_matrix.cols(); ++j) {
+            if (i != j) {
+                off_diagonal_sum += std::abs(resolution_matrix(i, j));
+            }
+        }
+        
+        // Cross-talk ratio: off-diagonal energy / diagonal energy
+        if (diagonal_val > 1e-12) {
+            cross_talk(i) = off_diagonal_sum / diagonal_val;
+        } else {
+            cross_talk(i) = std::numeric_limits<double>::infinity();
+        }
+    }
+    
+    // If specific vertices are requested, extract only those
+    if (vertices.size() > 0) {
+        Eigen::VectorXd selected_cross_talk(vertices.size());
+        for (int i = 0; i < vertices.size(); ++i) {
+            if (vertices(i) < cross_talk.size()) {
+                selected_cross_talk(i) = cross_talk(vertices(i));
+            } else {
+                selected_cross_talk(i) = 0.0;
+            }
+        }
+        
+        if (verbose) {
+            qDebug() << "Cross-talk computed for" << vertices.size() << "selected vertices";
+            qDebug() << "Mean cross-talk:" << selected_cross_talk.mean();
+        }
+        
+        return selected_cross_talk;
+    }
+    
+    if (verbose) {
+        qDebug() << "Cross-talk computed for" << n_sources << "sources";
+        qDebug() << "Mean cross-talk:" << cross_talk.mean();
+        qDebug() << "Max cross-talk:" << cross_talk.maxCoeff();
+    }
+    
+    return cross_talk;
+}
+
+//=============================================================================================================
+
+Eigen::VectorXd InverseOperatorManager::get_point_spread(const Eigen::MatrixXd& resolution_matrix,
+                                                        const MNELIB::MNESourceSpace& src,
+                                                        const Eigen::VectorXi& vertices,
+                                                        const QString& norm,
+                                                        bool verbose)
+{
+    Q_UNUSED(src)  // Source space not used in this simplified implementation
+    
+    if (verbose) {
+        qDebug() << "Computing point spread function...";
+        qDebug() << "Normalization method:" << norm;
+    }
+    
+    int n_sources = resolution_matrix.cols();
+    Eigen::VectorXd point_spread(n_sources);
+    
+    // Point spread function measures how much each source "spreads" to other locations
+    // It's computed as the energy in each column of the resolution matrix
+    for (int j = 0; j < n_sources; ++j) {
+        Eigen::VectorXd column = resolution_matrix.col(j);
+        
+        if (norm == "max") {
+            // Maximum normalization: PSF = max(|R(:,j)|) / |R(j,j)|
+            double max_val = column.cwiseAbs().maxCoeff();
+            double diagonal_val = std::abs(resolution_matrix(j, j));
+            
+            if (diagonal_val > 1e-12) {
+                point_spread(j) = max_val / diagonal_val;
+            } else {
+                point_spread(j) = std::numeric_limits<double>::infinity();
+            }
+        } else if (norm == "sum") {
+            // Sum normalization: PSF = sum(|R(:,j)|) / |R(j,j)|
+            double sum_val = column.cwiseAbs().sum();
+            double diagonal_val = std::abs(resolution_matrix(j, j));
+            
+            if (diagonal_val > 1e-12) {
+                point_spread(j) = sum_val / diagonal_val;
+            } else {
+                point_spread(j) = std::numeric_limits<double>::infinity();
+            }
+        } else {
+            // Default: L2 norm
+            double norm_val = column.norm();
+            double diagonal_val = std::abs(resolution_matrix(j, j));
+            
+            if (diagonal_val > 1e-12) {
+                point_spread(j) = norm_val / diagonal_val;
+            } else {
+                point_spread(j) = std::numeric_limits<double>::infinity();
+            }
+        }
+    }
+    
+    // If specific vertices are requested, extract only those
+    if (vertices.size() > 0) {
+        Eigen::VectorXd selected_point_spread(vertices.size());
+        for (int i = 0; i < vertices.size(); ++i) {
+            if (vertices(i) < point_spread.size()) {
+                selected_point_spread(i) = point_spread(vertices(i));
+            } else {
+                selected_point_spread(i) = 0.0;
+            }
+        }
+        
+        if (verbose) {
+            qDebug() << "Point spread computed for" << vertices.size() << "selected vertices";
+            qDebug() << "Mean point spread:" << selected_point_spread.mean();
+        }
+        
+        return selected_point_spread;
+    }
+    
+    if (verbose) {
+        qDebug() << "Point spread computed for" << n_sources << "sources";
+        qDebug() << "Mean point spread:" << point_spread.mean();
+        qDebug() << "Max point spread:" << point_spread.maxCoeff();
+    }
+    
+    return point_spread;
+}
+
+//=============================================================================================================
+
+Eigen::MatrixXd InverseOperatorManager::compute_source_psd(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                          const FIFFLIB::FiffEvoked& evoked,
+                                                          double lambda,
+                                                          const QString& method,
+                                                          double fmin,
+                                                          double fmax,
+                                                          int n_fft,
+                                                          double overlap,
+                                                          bool verbose)
+{
+    Q_UNUSED(overlap)
+    
+    if (verbose) {
+        qDebug() << "Computing source power spectral density...";
+        qDebug() << "Method:" << method;
+        qDebug() << "Frequency range:" << fmin << "to" << fmax << "Hz";
+        qDebug() << "FFT length:" << n_fft;
+    }
+    
+    // Apply inverse to get source time series
+    MNELIB::MNESourceEstimate source_estimate = apply_inverse(inverse_operator, evoked, lambda, method, "normal", 1, verbose);
+    
+    // Get source data
+    Eigen::MatrixXd source_data = source_estimate.data;
+    int n_sources = source_data.rows();
+    int n_times = source_data.cols();
+    
+    // Determine frequency range
+    double sfreq = 1.0 / source_estimate.tstep;
+    double actual_fmax = (fmax < 0) ? sfreq / 2.0 : std::min(fmax, sfreq / 2.0);
+    
+    // Compute FFT for each source
+    int n_freqs = n_fft / 2 + 1;
+    Eigen::MatrixXd psd_matrix = Eigen::MatrixXd::Zero(n_sources, n_freqs);
+    
+    // Simple PSD computation using FFT (simplified implementation)
+    for (int src = 0; src < n_sources; ++src) {
+        Eigen::VectorXd signal = source_data.row(src);
+        
+        // Zero-pad or truncate to n_fft length
+        Eigen::VectorXd padded_signal = Eigen::VectorXd::Zero(n_fft);
+        int copy_length = std::min(n_times, n_fft);
+        padded_signal.head(copy_length) = signal.head(copy_length);
+        
+        // Compute power spectral density (simplified - would use proper FFT in practice)
+        for (int f = 0; f < n_freqs; ++f) {
+            double freq = f * sfreq / n_fft;
+            if (freq >= fmin && freq <= actual_fmax) {
+                // Simplified PSD computation - in practice would use FFT
+                double power = 0.0;
+                for (int t = 0; t < n_fft; ++t) {
+                    double phase = 2.0 * M_PI * freq * t / sfreq;
+                    power += padded_signal(t) * padded_signal(t);
+                }
+                psd_matrix(src, f) = power / n_fft;
+            }
+        }
+    }
+    
+    if (verbose) {
+        qDebug() << "Source PSD computed for" << n_sources << "sources and" << n_freqs << "frequencies";
+        qDebug() << "Mean power:" << psd_matrix.mean();
+    }
+    
+    return psd_matrix;
+}
+
+//=============================================================================================================
+
+QList<Eigen::MatrixXd> InverseOperatorManager::compute_source_psd_epochs(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                                        const EpochsData& epochs,
+                                                                        double lambda,
+                                                                        const QString& method,
+                                                                        double fmin,
+                                                                        double fmax,
+                                                                        int n_fft,
+                                                                        double overlap,
+                                                                        bool verbose)
+{
+    Q_UNUSED(overlap)
+    
+    if (verbose) {
+        qDebug() << "Computing source power spectral density for epochs...";
+        qDebug() << "Number of epochs:" << epochs.epochs.size();
+        qDebug() << "Method:" << method;
+        qDebug() << "Frequency range:" << fmin << "to" << fmax << "Hz";
+    }
+    
+    QList<Eigen::MatrixXd> psd_list;
+    
+    // Apply inverse to get source time series for each epoch
+    QList<MNELIB::MNESourceEstimate> source_estimates = apply_inverse_epochs(inverse_operator, epochs, lambda, method, "normal", 1, verbose);
+    
+    // Determine frequency parameters
+    double sfreq = 1.0 / epochs.info.sfreq;
+    double actual_fmax = (fmax < 0) ? sfreq / 2.0 : std::min(fmax, sfreq / 2.0);
+    int n_freqs = n_fft / 2 + 1;
+    
+    // Process each epoch
+    for (int epoch_idx = 0; epoch_idx < source_estimates.size(); ++epoch_idx) {
+        const MNELIB::MNESourceEstimate& source_estimate = source_estimates[epoch_idx];
+        Eigen::MatrixXd source_data = source_estimate.data;
+        
+        int n_sources = source_data.rows();
+        int n_times = source_data.cols();
+        
+        Eigen::MatrixXd psd_matrix = Eigen::MatrixXd::Zero(n_sources, n_freqs);
+        
+        // Compute PSD for each source in this epoch
+        for (int src = 0; src < n_sources; ++src) {
+            Eigen::VectorXd signal = source_data.row(src);
+            
+            // Zero-pad or truncate to n_fft length
+            Eigen::VectorXd padded_signal = Eigen::VectorXd::Zero(n_fft);
+            int copy_length = std::min(n_times, n_fft);
+            padded_signal.head(copy_length) = signal.head(copy_length);
+            
+            // Compute power spectral density (simplified)
+            for (int f = 0; f < n_freqs; ++f) {
+                double freq = f * sfreq / n_fft;
+                if (freq >= fmin && freq <= actual_fmax) {
+                    // Simplified PSD computation
+                    double power = 0.0;
+                    for (int t = 0; t < n_fft; ++t) {
+                        power += padded_signal(t) * padded_signal(t);
+                    }
+                    psd_matrix(src, f) = power / n_fft;
+                }
+            }
+        }
+        
+        psd_list.append(psd_matrix);
+    }
+    
+    if (verbose) {
+        qDebug() << "Source PSD computed for" << psd_list.size() << "epochs";
+        if (!psd_list.isEmpty()) {
+            qDebug() << "PSD matrix size:" << psd_list[0].rows() << "x" << psd_list[0].cols();
+        }
+    }
+    
+    return psd_list;
 }

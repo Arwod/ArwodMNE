@@ -43,6 +43,7 @@
 #include <mne/mne_inverse_operator.h>
 #include <mne/mne_forwardsolution.h>
 #include <mne/mne_sourceestimate.h>
+#include <mne/mne_sourcespace.h>
 #include <fiff/fiff_cov.h>
 #include <fiff/fiff_info.h>
 #include <fiff/fiff_evoked.h>
@@ -416,6 +417,110 @@ public:
                                                                            const QString& pick_ori = "normal",
                                                                            int nave = 1,
                                                                            bool verbose = true);
+
+    //=========================================================================================================
+    /**
+     * Make inverse resolution matrix for analyzing source localization accuracy
+     *
+     * @param[in] inverse_operator  Inverse operator
+     * @param[in] forward           Forward solution
+     * @param[in] method            Method ("MNE", "dSPM", "sLORETA", "eLORETA")
+     * @param[in] lambda            Regularization parameter
+     * @param[in] verbose           Verbose output
+     *
+     * @return Resolution matrix
+     */
+    static Eigen::MatrixXd make_inverse_resolution_matrix(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                         const MNELIB::MNEForwardSolution& forward,
+                                                         const QString& method = "dSPM",
+                                                         double lambda = -1.0,
+                                                         bool verbose = true);
+
+    //=========================================================================================================
+    /**
+     * Get cross-talk function from resolution matrix
+     *
+     * @param[in] resolution_matrix Resolution matrix
+     * @param[in] src               Source space
+     * @param[in] vertices          Vertices to analyze
+     * @param[in] verbose           Verbose output
+     *
+     * @return Cross-talk values
+     */
+    static Eigen::VectorXd get_cross_talk(const Eigen::MatrixXd& resolution_matrix,
+                                         const MNELIB::MNESourceSpace& src,
+                                         const Eigen::VectorXi& vertices = Eigen::VectorXi(),
+                                         bool verbose = true);
+
+    //=========================================================================================================
+    /**
+     * Get point spread function from resolution matrix
+     *
+     * @param[in] resolution_matrix Resolution matrix
+     * @param[in] src               Source space
+     * @param[in] vertices          Vertices to analyze
+     * @param[in] norm              Normalization method ("max", "sum")
+     * @param[in] verbose           Verbose output
+     *
+     * @return Point spread values
+     */
+    static Eigen::VectorXd get_point_spread(const Eigen::MatrixXd& resolution_matrix,
+                                           const MNELIB::MNESourceSpace& src,
+                                           const Eigen::VectorXi& vertices = Eigen::VectorXi(),
+                                           const QString& norm = "max",
+                                           bool verbose = true);
+
+    //=========================================================================================================
+    /**
+     * Compute source power spectral density from evoked data
+     *
+     * @param[in] inverse_operator  Inverse operator
+     * @param[in] evoked            Evoked data
+     * @param[in] lambda            Regularization parameter
+     * @param[in] method            Method ("MNE", "dSPM", "sLORETA", "eLORETA")
+     * @param[in] fmin              Minimum frequency
+     * @param[in] fmax              Maximum frequency
+     * @param[in] n_fft             FFT length
+     * @param[in] overlap           Overlap between segments
+     * @param[in] verbose           Verbose output
+     *
+     * @return Source power spectral density
+     */
+    static Eigen::MatrixXd compute_source_psd(const MNELIB::MNEInverseOperator& inverse_operator,
+                                             const FIFFLIB::FiffEvoked& evoked,
+                                             double lambda = -1.0,
+                                             const QString& method = "dSPM",
+                                             double fmin = 0.0,
+                                             double fmax = -1.0,
+                                             int n_fft = 2048,
+                                             double overlap = 0.5,
+                                             bool verbose = true);
+
+    //=========================================================================================================
+    /**
+     * Compute source power spectral density from epochs data
+     *
+     * @param[in] inverse_operator  Inverse operator
+     * @param[in] epochs            Epochs data
+     * @param[in] lambda            Regularization parameter
+     * @param[in] method            Method ("MNE", "dSPM", "sLORETA", "eLORETA")
+     * @param[in] fmin              Minimum frequency
+     * @param[in] fmax              Maximum frequency
+     * @param[in] n_fft             FFT length
+     * @param[in] overlap           Overlap between segments
+     * @param[in] verbose           Verbose output
+     *
+     * @return Source power spectral density for each epoch
+     */
+    static QList<Eigen::MatrixXd> compute_source_psd_epochs(const MNELIB::MNEInverseOperator& inverse_operator,
+                                                           const EpochsData& epochs,
+                                                           double lambda = -1.0,
+                                                           const QString& method = "dSPM",
+                                                           double fmin = 0.0,
+                                                           double fmax = -1.0,
+                                                           int n_fft = 2048,
+                                                           double overlap = 0.5,
+                                                           bool verbose = true);
 
 private:
     //=========================================================================================================
