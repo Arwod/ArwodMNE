@@ -36,6 +36,8 @@ set(SOURCES
   hpiFit/hpifit.cpp
   hpiFit/hpifitdata.cpp
   hpiFit/sensorset.cpp
+  sparseInverse/gamma_map.cpp
+  sparseInverse/mixed_norm.cpp
 )
 
 set(HEADERS
@@ -66,6 +68,8 @@ set(HEADERS
   hpiFit/hpifit.h
   hpiFit/hpifitdata.h
   hpiFit/sensorset.h
+  sparseInverse/gamma_map.h
+  sparseInverse/mixed_norm.h
 )
 
 set(FILE_TO_UPDATE inverse_global.cpp)
