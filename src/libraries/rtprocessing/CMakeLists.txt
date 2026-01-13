@@ -11,41 +11,45 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 
 set(SOURCES
-    icp.cpp
-    rtcov.cpp
-    rtinvop.cpp
-    averaging.cpp
-    rtaveraging.cpp
-    rtnoise.cpp
-    rthpis.cpp
-    filter.cpp
-    rtconnectivity.cpp
-    rtprocessing_global.cpp
-    sphara.cpp
-    detecttrigger.cpp
-    helpers/cosinefilter.cpp
-    helpers/parksmcclellan.cpp
-    helpers/filterkernel.cpp
-    helpers/filterio.cpp
+  icp.cpp
+  rtcov.cpp
+  rtinvop.cpp
+  averaging.cpp
+  rtaveraging.cpp
+  rtnoise.cpp
+  rthpis.cpp
+  filter.cpp
+  rtconnectivity.cpp
+  rtprocessing_global.cpp
+  sphara.cpp
+  detecttrigger.cpp
+  helpers/cosinefilter.cpp
+  helpers/parksmcclellan.cpp
+  helpers/filterkernel.cpp
+  helpers/filterio.cpp
+  helpers/firfilter.cpp
+  helpers/iirfilter.cpp
 )
 
 set(HEADERS
-    icp.h
-    rtprocessing_global.h
-    rtcov.h
-    rtinvop.h
-    averaging.h
-    rtaveraging.h
-    rtnoise.h
-    rthpis.h
-    filter.h
-    detecttrigger.h
-    sphara.h
-    rtconnectivity.h
-    helpers/cosinefilter.h
-    helpers/parksmcclellan.h
-    helpers/filterkernel.h
-    helpers/filterio.h
+  icp.h
+  rtprocessing_global.h
+  rtcov.h
+  rtinvop.h
+  averaging.h
+  rtaveraging.h
+  rtnoise.h
+  rthpis.h
+  filter.h
+  detecttrigger.h
+  sphara.h
+  rtconnectivity.h
+  helpers/cosinefilter.h
+  helpers/parksmcclellan.h
+  helpers/filterkernel.h
+  helpers/filterio.h
+  helpers/firfilter.h
+  helpers/iirfilter.h
 )
 
 set(FILE_TO_UPDATE rtprocessing_global.cpp.cpp)
@@ -59,7 +63,7 @@ add_library(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 set(FFTW_LIBS "")
 
 if(USE_FFTW)
-  if (WIN32)
+  if(WIN32)
     set(FFTW_LIBS
       ${FFTW_DIR_LIBS}/libfftw3-3.dll
       ${FFTW_DIR_LIBS}/libfftw3f-3.dll
@@ -77,23 +81,23 @@ target_include_directories(${PROJECT_NAME} PUBLIC ../)
 set(QT_REQUIRED_COMPONENT_LIBS ${QT_REQUIRED_COMPONENTS})
 list(TRANSFORM QT_REQUIRED_COMPONENT_LIBS PREPEND "Qt${QT_VERSION_MAJOR}::")
 
-set(MNE_LIBS_REQUIRED 
-    mne_utils
-    mne_fiff
-    mne_mne
-    mne_connectivity
-    mne_fwd
-    mne_inverse
+set(MNE_LIBS_REQUIRED
+  mne_utils
+  mne_fiff
+  mne_mne
+  mne_connectivity
+  mne_fwd
+  mne_inverse
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    ${QT_REQUIRED_COMPONENT_LIBS}
-    ${MNE_LIBS_REQUIRED}
-    eigen
-    ${FFTW_LIBS})
+  ${QT_REQUIRED_COMPONENT_LIBS}
+  ${MNE_LIBS_REQUIRED}
+  eigen
+  ${FFTW_LIBS})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE MNE_RTPROCESSING_LIBRARY MNE_GIT_HASH_SHORT="${MNE_GIT_HASH_SHORT}" MNE_GIT_HASH_LONG="${MNE_GIT_HASH_LONG}")
 
 if(NOT BUILD_SHARED_LIBS)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE STATICBUILD)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE STATICBUILD)
 endif()
