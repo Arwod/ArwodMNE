@@ -72,4 +72,8 @@ add_subdirectory(test_stats)
 add_subdirectory(test_parametric_tests)
 add_subdirectory(test_correction_properties)
 add_subdirectory(test_permutation_properties)
+add_subdirectory(test_sparse_reconstruction)
+add_subdirectory(test_sparse_reconstruction_gamma_map)
+add_subdirectory(test_mixed_norm)
+add_subdirectory(test_simulation_statistical_consistency)
 

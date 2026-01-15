@@ -64,6 +64,10 @@ endif()
 # Generate json file detailing project compilation. (Typically for LSPs)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Force single-threaded compilation to prevent system overload
+set(CMAKE_BUILD_PARALLEL_LEVEL 1)
+message("-- [MNE-CPP] Using single-threaded compilation to prevent system overload")
+
 # If no build type is specified, default to Release
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release")
