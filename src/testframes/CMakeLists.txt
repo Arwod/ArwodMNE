@@ -81,4 +81,6 @@ add_subdirectory(test_forward_solution_linearity)
 add_subdirectory(test_forward_solution_processing)
 add_subdirectory(test_data_io_roundtrip)
 add_subdirectory(test_data_compatibility)
+add_subdirectory(test_montage_distance_preservation)
+add_subdirectory(test_channel_management)
 
