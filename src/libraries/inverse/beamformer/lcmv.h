@@ -2,38 +2,53 @@
 #define LCMV_H
 
 #include "../inverse_global.h"
+#include "covariance.h"
 #include <Eigen/Core>
 #include <vector>
+#include <string>
 
 namespace INVERSELIB {
+
+struct INVERSESHARED_EXPORT BeamformerWeights {
+    Eigen::MatrixXd weights; // (n_sources x n_channels)
+    std::vector<std::string> ch_names;
+    std::string pick_ori;
+    bool weight_norm;
+    Eigen::MatrixXd whitening_mat; // Optional whitening matrix used
+    
+    BeamformerWeights() : weight_norm(false) {}
+};
 
 class INVERSESHARED_EXPORT LCMV
 {
 public:
     /**
-     * Compute LCMV Spatial Filter weights.
+     * @brief Compute LCMV beamformer.
      * 
-     * @param[in] leadfield Forward solution leadfield (n_channels x n_sources).
-     *                      Usually n_sources is small (e.g. 3 for vector dipole at one location, or 1 for fixed).
-     *                      If computing for whole brain, this function is usually called per source location.
-     * @param[in] data_cov Data covariance matrix (n_channels x n_channels).
-     * @param[in] reg Regularization parameter (e.g. 0.05 * trace(C) / n).
-     * @param[in] pick_ori Orientation selection ("vector", "max-power", "normal").
-     *                     For now, assume "vector" (keep all source components).
-     * @return Weights (n_sources x n_channels).
+     * @param leadfield (n_channels x n_sources*n_ori)
+     * @param data_cov Data covariance (the C matrix in LCMV).
+     * @param noise_cov Noise covariance (optional, for weight normalization).
+     * @param reg Regularization factor (0.05).
+     * @param pick_ori "vector", "max-power", "normal".
+     * @param weight_norm "unit-noise-gain", "none".
+     * @param n_ori Number of orientations per source (default 3 for vector, 1 for fixed/normal).
      */
+    static BeamformerWeights make_lcmv(
+        const Eigen::MatrixXd& leadfield,
+        const Covariance& data_cov,
+        const Covariance& noise_cov = Covariance(),
+        double reg = 0.05,
+        const std::string& pick_ori = "vector",
+        const std::string& weight_norm = "none",
+        int n_ori = 3
+    );
+
+    static Eigen::MatrixXd apply(const BeamformerWeights& weights, const Eigen::MatrixXd& data);
+
+    // Deprecated interface
     static Eigen::MatrixXd compute_weights(const Eigen::MatrixXd& leadfield, 
                                            const Eigen::MatrixXd& data_cov, 
                                            double reg = 0.05);
-    
-    /**
-     * Apply LCMV weights to data.
-     * 
-     * @param[in] weights Spatial filter weights (n_sources x n_channels).
-     * @param[in] data Input data (n_channels x n_times).
-     * @return Source estimates (n_sources x n_times).
-     */
-    static Eigen::MatrixXd apply(const Eigen::MatrixXd& weights, const Eigen::MatrixXd& data);
 };
 
 } // NAMESPACE

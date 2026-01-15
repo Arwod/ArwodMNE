@@ -149,6 +149,14 @@ public:
 
     //=========================================================================================================
     /**
+     * Write the covariance matrix to a file.
+     *
+     * @param[in] p_IODevice     The IO device to write to.
+     */
+    void write(QIODevice &p_IODevice);
+
+    //=========================================================================================================
+    /**
      * Regularize noise covariance matrix
      *
      * This method works by adding a constant to the diagonal for each channel type separatly.

@@ -40,8 +40,11 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <cmath>
+#include <algorithm>
 #include <iostream>
 #include "mnemath.h"
+#include <QtCore/QtGlobal>
 
 //=============================================================================================================
 // EIGEN INCLUDES
@@ -771,4 +774,92 @@ bool MNEMath::compareTransformation(const MatrixX4f& mDevHeadT,
     }
 
     return bState;
+}
+
+//=============================================================================================================
+
+double MNEMath::ledoit_wolf_shrinkage(const MatrixXd& data, bool assume_centered)
+{
+    // data is (n_channels x n_samples)
+    qint32 n_channels = data.rows(); // p
+    qint32 n_samples = data.cols();  // n
+
+    if (n_samples < 2) {
+        return 0.0;
+    }
+
+    // 1. Center data
+    MatrixXd centered_data;
+    if (!assume_centered) {
+        VectorXd mean = data.rowwise().mean();
+        centered_data = data - mean.replicate(1, n_samples);
+    } else {
+        centered_data = data;
+    }
+
+    // 2. Compute Empirical Covariance S
+    MatrixXd S = (centered_data * centered_data.transpose()) / (double)(n_samples - 1);
+
+    // 3. Compute mu = Tr(S) / p
+    double mu = S.trace() / n_channels;
+
+    // 4. Compute delta^2 = ||S - mu*I||_F^2
+    MatrixXd S_diff = S;
+    for(int i = 0; i < n_channels; ++i) {
+        S_diff(i, i) -= mu;
+    }
+    double delta2 = S_diff.squaredNorm();
+
+    // 5. Compute beta^2
+    MatrixXd X = centered_data.transpose(); // (n, p)
+    MatrixXd X2 = X.array().square();
+    
+    VectorXd X2_sum_axis1 = X2.rowwise().sum(); 
+    double term1_sum = X2_sum_axis1.array().square().sum();
+    
+    double term1 = 1.0 / (n_samples * (n_samples - 1.0)) * term1_sum;
+    
+    double emp_cov_norm2 = S.squaredNorm();
+    double term2 = 1.0 / (n_samples * std::pow(n_samples - 1.0, 2)) * emp_cov_norm2 * std::pow(n_samples, 2);
+    
+    double beta_sklearn = term1 - term2;
+    
+    // 6. Compute shrinkage
+    if (std::abs(delta2) < 1e-15) {
+        return 0.0;
+    }
+
+    double shrinkage = std::min(beta_sklearn / delta2, 1.0);
+    return std::max(shrinkage, 0.0);
+}
+
+//=============================================================================================================
+
+MatrixXd MNEMath::ledoit_wolf(const MatrixXd& data, bool assume_centered)
+{
+    double shrinkage = ledoit_wolf_shrinkage(data, assume_centered);
+    
+    // 1. Center
+    qint32 n_samples = data.cols();
+    MatrixXd centered_data;
+    if (!assume_centered) {
+        VectorXd mean = data.rowwise().mean();
+        centered_data = data - mean.replicate(1, n_samples);
+    } else {
+        centered_data = data;
+    }
+    
+    // 2. Empirical Covariance
+    MatrixXd S = (centered_data * centered_data.transpose()) / (double)(n_samples - 1);
+    
+    // 3. Regularize
+    // (1 - shrinkage) * S + shrinkage * mu * I
+    double mu = S.trace() / S.rows();
+    
+    S *= (1.0 - shrinkage);
+    for(int i = 0; i < S.rows(); ++i) {
+        S(i, i) += shrinkage * mu;
+    }
+    
+    return S;
 }

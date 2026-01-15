@@ -42,10 +42,13 @@
 
 #include "../mne_global.h"
 #include "fiff/c/fiff_sparse_matrix.h"
+#include "../mne_sourceestimate.h"
 
 //=============================================================================================================
 // EIGEN INCLUDES
 //=============================================================================================================
+
+#include <Eigen/Sparse>
 
 //=============================================================================================================
 // QT INCLUDES
@@ -64,54 +67,97 @@
 namespace MNELIB
 {
 
-//=============================================================================================================
-// MNELIB FORWARD DECLARATIONS
-//=============================================================================================================
+    //=============================================================================================================
+    // MNELIB FORWARD DECLARATIONS
+    //=============================================================================================================
 
-//=============================================================================================================
-/**
- * Replaces *morphMap,morphMapRec struct (analyze_types.c).
- *
- * @brief The MneMorphMap class.
- */
-class MNESHARED_EXPORT MneMorphMap
-{
-public:
-    typedef QSharedPointer<MneMorphMap> SPtr;              /**< Shared pointer type for MneMorphMap. */
-    typedef QSharedPointer<const MneMorphMap> ConstSPtr;   /**< Const shared pointer type for MneMorphMap. */
-
-    //=========================================================================================================
+    //=============================================================================================================
     /**
-     * Constructs the MneMorphMap.
+     * Replaces *morphMap,morphMapRec struct (analyze_types.c).
+     *
+     * @brief The MneMorphMap class.
      */
-    MneMorphMap();
+    class MNESHARED_EXPORT MneMorphMap
+    {
+    public:
+        typedef QSharedPointer<MneMorphMap> SPtr;            /**< Shared pointer type for MneMorphMap. */
+        typedef QSharedPointer<const MneMorphMap> ConstSPtr; /**< Const shared pointer type for MneMorphMap. */
 
-    //=========================================================================================================
-    /**
-     * Destroys the MneMorphMap.
-     */
-    ~MneMorphMap();
+        //=========================================================================================================
+        /**
+         * Reads a morph map from a file.
+         *
+         * @param[in] subject_from   The subject name to morph from.
+         * @param[in] subject_to     The subject name to morph to.
+         * @param[in] subjects_dir   The subjects directory.
+         * @param[out] map_lh        The left hemisphere morph map.
+         * @param[out] map_rh        The right hemisphere morph map.
+         *
+         * @return true if successful, false otherwise.
+         */
+        static bool readMorphMap(const QString &subject_from,
+                                 const QString &subject_to,
+                                 const QString &subjects_dir,
+                                 MneMorphMap::SPtr &map_lh,
+                                 MneMorphMap::SPtr &map_rh);
 
-public:
-    FIFFLIB::FiffSparseMatrix* map;		/* Multiply the data in the from surface with this to get to
-                   * 'this' surface from the 'from' surface */
-    int *best;			/* For each point on 'this' surface, the closest point on 'from' surface */
-    int from_kind;		/* The kind field of the other surface */
-    char *from_subj;		/* Name of the subject of the other surface */
+        //=========================================================================================================
+        /**
+         * Morphs a source estimate.
+         *
+         * @param[in] stc            The source estimate to morph.
+         * @param[in] subject_from   The subject name to morph from.
+         * @param[in] subject_to     The subject name to morph to.
+         * @param[in] subjects_dir   The subjects directory.
+         *
+         * @return The morphed source estimate.
+         */
+        static MNESourceEstimate morphSourceEstimate(const MNESourceEstimate &stc,
+                                                     const QString &subject_from,
+                                                     const QString &subject_to,
+                                                     const QString &subjects_dir);
 
-// ### OLD STRUCT ###
-//    typedef struct {
-//      FIFFLIB::FiffSparseMatrix* map;		/* Multiply the data in the from surface with this to get to
-//                     * 'this' surface from the 'from' surface */
-//      int *best;			/* For each point on 'this' surface, the closest point on 'from' surface */
-//      int from_kind;		/* The kind field of the other surface */
-//      char *from_subj;		/* Name of the subject of the other surface */
-//    } *morphMap,morphMapRec;
-};
+        //=========================================================================================================
+        /**
+         * Converts the internal sparse matrix to Eigen::SparseMatrix.
+         *
+         * @return The Eigen::SparseMatrix representation.
+         */
+        Eigen::SparseMatrix<double> toEigen() const;
 
-//=============================================================================================================
-// INLINE DEFINITIONS
-//=============================================================================================================
+    public:
+        //=========================================================================================================
+        /**
+         * Constructs the MneMorphMap.
+         */
+        MneMorphMap();
+
+        //=========================================================================================================
+        /**
+         * Destroys the MneMorphMap.
+         */
+        ~MneMorphMap();
+
+    public:
+        FIFFLIB::FiffSparseMatrix *map; /* Multiply the data in the from surface with this to get to
+                                         * 'this' surface from the 'from' surface */
+        int *best;                      /* For each point on 'this' surface, the closest point on 'from' surface */
+        int from_kind;                  /* The kind field of the other surface */
+        char *from_subj;                /* Name of the subject of the other surface */
+
+        // ### OLD STRUCT ###
+        //    typedef struct {
+        //      FIFFLIB::FiffSparseMatrix* map;		/* Multiply the data in the from surface with this to get to
+        //                     * 'this' surface from the 'from' surface */
+        //      int *best;			/* For each point on 'this' surface, the closest point on 'from' surface */
+        //      int from_kind;		/* The kind field of the other surface */
+        //      char *from_subj;		/* Name of the subject of the other surface */
+        //    } *morphMap,morphMapRec;
+    };
+
+    //=============================================================================================================
+    // INLINE DEFINITIONS
+    //=============================================================================================================
 } // NAMESPACE MNELIB
 
 #endif // MNEMORPHMAP_H

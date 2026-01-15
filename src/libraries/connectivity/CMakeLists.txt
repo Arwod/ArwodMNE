@@ -13,6 +13,7 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS}
 set(SOURCES
     connectivity_global.cpp
     metrics/abstractmetric.cpp
+    metrics/abstractspectralmetric.cpp
     metrics/correlation.cpp
     metrics/crosscorrelation.cpp
     metrics/coherency.cpp
@@ -33,6 +34,7 @@ set(SOURCES
 set(HEADERS
     connectivity_global.h
     metrics/abstractmetric.h
+    metrics/abstractspectralmetric.h
     metrics/correlation.h
     metrics/crosscorrelation.h
     metrics/coherency.h
@@ -84,6 +86,7 @@ set(MNE_LIBS_REQUIRED
     mne_fiff
     mne_fs
     mne_mne
+    mne_tfr
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

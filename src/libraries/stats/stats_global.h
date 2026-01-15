@@ -4,14 +4,19 @@
 #include <QtCore/qglobal.h>
 
 #if defined(STATICBUILD)
-#  define STATSSHARED_EXPORT
+#define STATSSHARED_EXPORT
 #elif defined(MNE_STATS_LIBRARY)
-#  define STATSSHARED_EXPORT Q_DECL_EXPORT
+#define STATSSHARED_EXPORT Q_DECL_EXPORT
 #else
-#  define STATSSHARED_EXPORT Q_DECL_IMPORT
+#define STATSSHARED_EXPORT Q_DECL_IMPORT
 #endif
 
-namespace STATSLIB {
+namespace STATSLIB
+{
+    STATSSHARED_EXPORT const char *getVersion();
+    STATSSHARED_EXPORT int getMajorVersion();
+    STATSSHARED_EXPORT int getMinorVersion();
+    STATSSHARED_EXPORT int getPatchVersion();
 }
 
 #endif // STATS_GLOBAL_H

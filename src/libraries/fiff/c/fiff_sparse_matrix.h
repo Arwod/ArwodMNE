@@ -50,6 +50,7 @@
 //=============================================================================================================
 
 #include <Eigen/Core>
+#include <Eigen/Sparse>
 
 //=============================================================================================================
 // QT INCLUDES
@@ -120,6 +121,14 @@ public:
                                                             float **vals);
 
     FIFFLIB::FiffSparseMatrix* mne_add_upper_triangle_rcs();
+
+    //=========================================================================================================
+    /**
+     * Converts the FiffSparseMatrix to an Eigen::SparseMatrix.
+     *
+     * @return The Eigen::SparseMatrix representation.
+     */
+    Eigen::SparseMatrix<double> toEigenSparse() const;
 
 public:
     FIFFLIB::fiff_int_t   coding;    /**< coding (storage) type of the sparse matrix. */

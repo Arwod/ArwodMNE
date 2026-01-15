@@ -1,56 +1,70 @@
-# Define the library name
-set(MNE_STATS_LIBRARY_NAME mne_stats)
+# Set the library name
+set(MNE_LIBRARY_NAME mne_stats)
 
-set(QT_REQUIRED_COMPONENTS Core)
+set(QT_REQUIRED_COMPONENTS Core Concurrent)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 
-set(SOURCES
+if(QT_VERSION_MAJOR EQUAL 6)
+    find_package(Qt6 REQUIRED COMPONENTS Core5Compat)
+endif()
+
+# Define the source files
+set(MNE_LIBRARY_SOURCES
     stats_global.cpp
-    ttest.cpp
-    correction.cpp
+    statistics.cpp
+    clusterpermutation.cpp
 )
 
-set(HEADERS
+# Define the header files
+set(MNE_LIBRARY_HEADERS
     stats_global.h
-    ttest.h
-    correction.h
+    statistics.h
+    clusterpermutation.h
 )
 
 # Create the library
-add_library(${MNE_STATS_LIBRARY_NAME} SHARED ${SOURCES} ${HEADERS})
+if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
+    qt_add_library(${MNE_LIBRARY_NAME} STATIC ${MNE_LIBRARY_SOURCES} ${MNE_LIBRARY_HEADERS})
+else()
+    add_library(${MNE_LIBRARY_NAME} STATIC ${MNE_LIBRARY_SOURCES} ${MNE_LIBRARY_HEADERS})
+endif()
 
-set(QT_REQUIRED_COMPONENT_LIBS ${QT_REQUIRED_COMPONENTS})
-list(TRANSFORM QT_REQUIRED_COMPONENT_LIBS PREPEND "Qt${QT_VERSION_MAJOR}::")
+# Define definitions
+if(NOT BUILD_SHARED_LIBS)
+    target_compile_definitions(${MNE_LIBRARY_NAME} PRIVATE STATICBUILD)
+endif()
 
-# Define the export macro
-target_compile_definitions(${MNE_STATS_LIBRARY_NAME} PRIVATE MNE_STATS_LIBRARY)
+# Define include directories
+target_include_directories(${MNE_LIBRARY_NAME} PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 
-# Link dependencies
-target_link_libraries(${MNE_STATS_LIBRARY_NAME}
-    ${QT_REQUIRED_COMPONENT_LIBS}
-    mne_utils
+# Define dependencies
+target_link_libraries(${MNE_LIBRARY_NAME} PUBLIC
+    Qt${QT_VERSION_MAJOR}::Core
+    Qt${QT_VERSION_MAJOR}::Concurrent
     eigen
 )
 
-# Include directories
-target_include_directories(${MNE_STATS_LIBRARY_NAME} PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
-    $<INSTALL_INTERFACE:include/libraries/stats>
-)
-
-if(NOT BUILD_SHARED_LIBS)
-    target_compile_definitions(${MNE_STATS_LIBRARY_NAME} PRIVATE STATICBUILD)
+if(QT_VERSION_MAJOR EQUAL 6)
+    target_link_libraries(${MNE_LIBRARY_NAME} PUBLIC Qt6::Core5Compat)
 endif()
 
-# Install rules
-install(TARGETS ${MNE_STATS_LIBRARY_NAME}
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
+# Set properties
+set_target_properties(${MNE_LIBRARY_NAME} PROPERTIES
+    VERSION ${MNE_LIBRARY_VERSION}
+    SOVERSION ${MNE_LIBRARY_SOVERSION}
 )
 
-install(FILES ${HEADERS}
-    DESTINATION include/libraries/stats
+# Install
+install(TARGETS ${MNE_LIBRARY_NAME}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(FILES ${MNE_LIBRARY_HEADERS}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/stats
 )

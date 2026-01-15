@@ -5,7 +5,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-set(QT_REQUIRED_COMPONENTS Core)
+set(QT_REQUIRED_COMPONENTS Core Concurrent)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 
@@ -15,6 +15,7 @@ set(SOURCES
     tfr_compute.cpp
     timefrequency.cpp
     psd.cpp
+    csd.cpp
 )
 
 set(HEADERS
@@ -23,6 +24,7 @@ set(HEADERS
     tfr_compute.h
     timefrequency.h
     psd.h
+    csd.h
 )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
