@@ -77,4 +77,6 @@ add_subdirectory(test_sparse_reconstruction_gamma_map)
 add_subdirectory(test_mixed_norm)
 add_subdirectory(test_simulation_statistical_consistency)
 add_subdirectory(test_noise_addition)
+add_subdirectory(test_forward_solution_linearity)
+add_subdirectory(test_forward_solution_processing)
 
