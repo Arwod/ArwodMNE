@@ -454,9 +454,10 @@ std::vector<Eigen::MatrixXcd> DICS::apply_weight_normalization(
                 Eigen::MatrixXcd L_s = L.block(0, start_col, L.rows(), n_ori);
                 
                 // Normalization factor
-                std::complex<double> norm_factor = w.adjoint() * L_s * L_s.adjoint() * w;
+                std::complex<double> norm_factor = (w.adjoint() * L_s * L_s.adjoint() * w).eval()(0,0);
                 if (std::abs(norm_factor) > 0) {
-                    W.row(src) /= std::sqrt(norm_factor);
+                    std::complex<double> sqrt_norm_factor = std::sqrt(norm_factor);
+                    W.row(src) /= sqrt_norm_factor;
                 }
             }
         }
