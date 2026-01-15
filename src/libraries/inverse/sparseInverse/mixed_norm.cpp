@@ -294,9 +294,12 @@ Eigen::MatrixXd MixedNorm::solveProximalGradient(const Eigen::MatrixXd& data)
     Eigen::MatrixXd G = m_matLeadfield.transpose() * m_matLeadfield;
     Eigen::MatrixXd Gy = m_matLeadfield.transpose() * data;
     
-    // Estimate Lipschitz constant
-    double L = G.norm(); // Spectral norm approximation
-    double step_size = m_optParams.step_size / L;
+    // Estimate Lipschitz constant more robustly
+    double L = G.diagonal().maxCoeff(); // Use max diagonal element
+    if (L < 1e-12) {
+        L = 1.0;
+    }
+    double step_size = 0.9 / L; // Use 0.9 for stability
     
     for (int iter = 0; iter < m_optParams.max_iterations; ++iter) {
         Eigen::MatrixXd X_old = X;
