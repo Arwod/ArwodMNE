@@ -10,6 +10,11 @@ set(SOURCES
     pca.cpp
     fastica.cpp
     ica.cpp
+    infomax.cpp
+    picard.cpp
+    artifact_detection.cpp
+    ecg_eog_processing.cpp
+    maxwell_filter.cpp
 )
 
 set(HEADERS
@@ -17,6 +22,11 @@ set(HEADERS
     pca.h
     fastica.h
     ica.h
+    infomax.h
+    picard.h
+    artifact_detection.h
+    ecg_eog_processing.h
+    maxwell_filter.h
 )
 
 # Create the library
