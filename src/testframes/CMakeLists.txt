@@ -79,4 +79,6 @@ add_subdirectory(test_simulation_statistical_consistency)
 add_subdirectory(test_noise_addition)
 add_subdirectory(test_forward_solution_linearity)
 add_subdirectory(test_forward_solution_processing)
+add_subdirectory(test_data_io_roundtrip)
+add_subdirectory(test_data_compatibility)
 
