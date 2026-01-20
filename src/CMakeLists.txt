@@ -44,7 +44,7 @@ if(WASM)
 endif()
 
 if(NO_IPC)
-    add_compile_definitions(NO_IPC)
+  add_compile_definitions(NO_IPC)
 endif()
 
 set(FFTW_DIR_LIBS "${PROJECT_SOURCE_DIR}/external/fftw")
@@ -64,9 +64,21 @@ endif()
 # Generate json file detailing project compilation. (Typically for LSPs)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Force single-threaded compilation to prevent system overload
-set(CMAKE_BUILD_PARALLEL_LEVEL 1)
-message("-- [MNE-CPP] Using single-threaded compilation to prevent system overload")
+# Enable parallel compilation for faster builds
+# Use system processor count or allow user override via CMAKE_BUILD_PARALLEL_LEVEL
+if(NOT DEFINED CMAKE_BUILD_PARALLEL_LEVEL)
+  include(ProcessorCount)
+  ProcessorCount(N)
+  if(NOT N EQUAL 0)
+    set(CMAKE_BUILD_PARALLEL_LEVEL ${N})
+    message("-- [MNE-CPP] Using ${N} parallel jobs for compilation")
+  else()
+    set(CMAKE_BUILD_PARALLEL_LEVEL 4)
+    message("-- [MNE-CPP] Could not detect processor count, using 4 parallel jobs")
+  endif()
+else()
+  message("-- [MNE-CPP] Using user-specified ${CMAKE_BUILD_PARALLEL_LEVEL} parallel jobs")
+endif()
 
 # If no build type is specified, default to Release
 if(NOT CMAKE_BUILD_TYPE)
@@ -148,7 +160,7 @@ endif()
 if(BUILD_TESTS)
   add_subdirectory(testframes)
 endif()
-  
+
 ##==============================================================================
 ## Add symbolic links to project resources folder
 
@@ -156,12 +168,12 @@ set(PROJECT_RESOURCES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../resources)
 set(OUTPUT_RESOURCES_DIR ${BINARY_OUTPUT_DIRECTORY}/resources)
 
 cmake_path(
-  NORMAL_PATH     PROJECT_RESOURCES_DIR
+  NORMAL_PATH PROJECT_RESOURCES_DIR
   OUTPUT_VARIABLE PROJECT_RESOURCES_DIR
 )
 
 cmake_path(
-  NORMAL_PATH     OUTPUT_RESOURCES_DIR
+  NORMAL_PATH OUTPUT_RESOURCES_DIR
   OUTPUT_VARIABLE OUTPUT_RESOURCES_DIR
 )
 
