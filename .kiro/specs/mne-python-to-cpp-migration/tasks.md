@@ -489,10 +489,20 @@
     - 优化关键算法的执行效率
     - **已完成**: 实现了全面的性能基准测试，所有测试通过，性能表现优秀
     - _需求: 15.2_
-  - [ ]* 18.4 编写端到端验证测试
+  - [x]* 18.4 编写端到端验证测试
 
     - 创建完整的数据处理流水线测试
     - 验证与Python版本的结果一致性
+    - **已完成**:
+        - 使用 `tests/verification_data/gen_test_data.py` 生成了基于 MNE-Python 的基准数据
+        - 修复了 `mne_stats` 库的链接问题
+        - 运行 `test_verification` 成功验证了以下模块的一致性：
+            - 基础信号处理 (Hilbert, Convolution, Windows, Filter)
+            - 时频分析 (Morlet, TFR, PSD)
+            - 源定位 (LCMV Beamformer, MNE/dSPM Minimum Norm, Dipole Fit)
+            - 统计分析 (T-Test)
+            - 连接性分析 (Connectivity)
+        - 误差均在允许范围内 (大部分 < 1e-12，偶极子定位误差 < 6mm)
     - _需求: 15.3_
 - [ ]
 
