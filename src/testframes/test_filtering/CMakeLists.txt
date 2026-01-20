@@ -33,8 +33,6 @@ set(MNE_LIBS_REQUIRED
   mne_fs
   mne_utils
   mne_events
-  mne_disp
-  mne_disp3D
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
