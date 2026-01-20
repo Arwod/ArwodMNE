@@ -548,6 +548,19 @@ VectorXd FIRFilter::designIdealResponse(const FilterDesign& design)
                 }
             }
             break;
+            
+        default:
+            idealResponse.setZero();
+            break;
+    }
+    
+    // Ensure linear phase by enforcing symmetry
+    if (design.linearPhase) {
+        for (int n = 0; n < numTaps / 2; ++n) {
+            double avg = (idealResponse[n] + idealResponse[numTaps - 1 - n]) / 2.0;
+            idealResponse[n] = avg;
+            idealResponse[numTaps - 1 - n] = avg;
+        }
     }
     
     return idealResponse;
@@ -560,7 +573,19 @@ VectorXd FIRFilter::applyWindow(const VectorXd& idealResponse, const FilterDesig
     VectorXd window = createWindow(design.window, idealResponse.size(), 
                                   design.kaiserBeta, design.tukeyAlpha, design.gaussianSigma);
     
-    return idealResponse.cwiseProduct(window);
+    VectorXd windowed = idealResponse.cwiseProduct(window);
+    
+    // Ensure linear phase by enforcing symmetry after windowing
+    if (design.linearPhase) {
+        int numTaps = windowed.size();
+        for (int n = 0; n < numTaps / 2; ++n) {
+            double avg = (windowed[n] + windowed[numTaps - 1 - n]) / 2.0;
+            windowed[n] = avg;
+            windowed[numTaps - 1 - n] = avg;
+        }
+    }
+    
+    return windowed;
 }
 
 //=============================================================================================================

@@ -1,17 +1,32 @@
+#==============================================================================================================
+#
+# @file     CMakeLists.txt
+# @author   Kiro AI Assistant
+# @since    0.1.0
+# @date     January, 2025
+#
+# @section  LICENSE
+#
+# Copyright (C) 2025, MNE-CPP authors. All rights reserved.
+#
+# @brief    This project file builds the noise addition unit tests.
+#
+#==============================================================================================================
+
 cmake_minimum_required(VERSION 3.14)
-project(test_filtering LANGUAGES CXX)
+project(test_noise_addition LANGUAGES CXX)
 
 #Handle qt uic, moc, rrc automatically
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-set(QT_REQUIRED_COMPONENTS Core Widgets 3DRender Concurrent Network Test)
+set(QT_REQUIRED_COMPONENTS Core Test)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 
 set(SOURCES
-    test_filtering.cpp
+    test_noise_addition.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -23,22 +38,16 @@ endif()
 set(QT_REQUIRED_COMPONENT_LIBS ${QT_REQUIRED_COMPONENTS})
 list(TRANSFORM QT_REQUIRED_COMPONENT_LIBS PREPEND "Qt${QT_VERSION_MAJOR}::")
 
-set(MNE_LIBS_REQUIRED 
-  mne_rtprocessing
-  mne_connectivity
-  mne_inverse
-  mne_fwd
-  mne_mne
-  mne_fiff
-  mne_fs
-  mne_utils
-  mne_events
+set(MNE_LIBS_REQUIRED
+    mne_utils
+    mne_fiff
+    mne_simulation
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-  ${QT_REQUIRED_COMPONENT_LIBS}
-  ${MNE_LIBS_REQUIRED}
-  eigen
+    ${QT_REQUIRED_COMPONENT_LIBS}
+    ${MNE_LIBS_REQUIRED}
+    eigen
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES

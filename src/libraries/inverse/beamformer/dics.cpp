@@ -434,8 +434,7 @@ std::vector<Eigen::MatrixXcd> DICS::apply_weight_normalization(
             
             for (int src = 0; src < W.rows(); ++src) {
                 Eigen::VectorXcd w = W.row(src);
-                double noise_gain_squared = (w.adjoint() * w).eval()(0,0).real();
-                double noise_gain = std::sqrt(noise_gain_squared);
+                double noise_gain = std::sqrt((w.adjoint() * w).real().eval()(0));
                 if (noise_gain > 0) {
                     W.row(src) /= noise_gain;
                 }
