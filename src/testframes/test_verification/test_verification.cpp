@@ -558,13 +558,15 @@ void TestVerification::verifyLCMV()
     QVERIFY(IOUtils::read_eigen_matrix(data, dataPath + "/lcmv_data.txt"));
     
     // Compute Covariance
-    MatrixXd cov = INVERSELIB::Covariance::compute_empirical(data);
+    INVERSELIB::Covariance cov = INVERSELIB::Covariance::compute_empirical(data);
     
     // Compute LCMV Weights
-    MatrixXd weights = INVERSELIB::LCMV::compute_weights(leadfield, cov, 0.05);
+    MatrixXd weights_mat = INVERSELIB::LCMV::compute_weights(leadfield, cov.data, 0.05);
     
     // Reconstruct Source
-    MatrixXd stc = INVERSELIB::LCMV::apply(weights, data);
+    INVERSELIB::BeamformerWeights weights_obj;
+    weights_obj.weights = weights_mat;
+    MatrixXd stc = INVERSELIB::LCMV::apply(weights_obj, data);
     
     // Verify Weights
     MatrixXd weights_ref;
@@ -573,7 +575,7 @@ void TestVerification::verifyLCMV()
     // Check correlation of weights
     // Since reg might differ slightly (if sklearn uses different formula), check correlation or relative error.
     // Python code should use same formula: reg * trace(C) / n
-    double diff_weights = (weights - weights_ref).norm() / weights_ref.norm();
+    double diff_weights = (weights_mat - weights_ref).norm() / weights_ref.norm();
     qDebug() << "Diff LCMV Weights (Rel Norm):" << diff_weights;
     QVERIFY(diff_weights < 1e-2); // Allow 1% error due to solver differences
     

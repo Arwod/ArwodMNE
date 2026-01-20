@@ -1,19 +1,25 @@
 #include "csp.h"
 #include <Eigen/Eigenvalues>
+#include <Eigen/LU>
 #include <iostream>
 #include <numeric>
 #include <cmath>
+#include <algorithm>
 
 namespace DECODINGLIB
 {
 
 //=============================================================================================================
+// CSP Implementation
+//=============================================================================================================
 
-CSP::CSP(int n_components, bool norm_trace, bool log, bool cov_est)
+CSP::CSP(int n_components, bool norm_trace, bool log, RegularizationMethod reg_method, double reg_param)
 : m_iNComponents(n_components)
 , m_bNormTrace(norm_trace)
 , m_bLog(log)
-, m_bCovEst(cov_est)
+, m_regMethod(reg_method)
+, m_dRegParam(reg_param)
+, m_strComponentSelection("extremes")
 {
 }
 
@@ -22,18 +28,111 @@ CSP::CSP(int n_components, bool norm_trace, bool log, bool cov_est)
 Eigen::MatrixXd CSP::computeCovariance(const Eigen::MatrixXd& epoch) const
 {
     // epoch is Channels x Time
-    // Centering is assumed to be done or not required for band-passed data?
-    // CSP usually assumes zero-mean signals (band-passed).
-    // We can subtract mean per row just in case.
-    
+    // Centering is assumed to be done or not required for band-passed data
     Eigen::MatrixXd centered = epoch.colwise() - epoch.rowwise().mean();
     Eigen::MatrixXd cov = (centered * centered.transpose()) / (double)(epoch.cols() - 1);
     
     if (m_bNormTrace) {
-        cov /= cov.trace();
+        double trace = cov.trace();
+        if (trace > 1e-12) {
+            cov /= trace;
+        }
     }
     
-    return cov;
+    return regularizeCovariance(cov);
+}
+
+//=============================================================================================================
+
+Eigen::MatrixXd CSP::regularizeCovariance(const Eigen::MatrixXd& cov) const
+{
+    Eigen::MatrixXd reg_cov = cov;
+    
+    switch (m_regMethod) {
+        case RegularizationMethod::None:
+            break;
+            
+        case RegularizationMethod::Diagonal:
+        {
+            double trace = cov.trace();
+            reg_cov += m_dRegParam * trace / cov.rows() * Eigen::MatrixXd::Identity(cov.rows(), cov.cols());
+            break;
+        }
+        
+        case RegularizationMethod::Shrinkage:
+        {
+            double trace = cov.trace();
+            Eigen::MatrixXd identity = Eigen::MatrixXd::Identity(cov.rows(), cov.cols());
+            reg_cov = (1.0 - m_dRegParam) * cov + m_dRegParam * (trace / cov.rows()) * identity;
+            break;
+        }
+        
+        case RegularizationMethod::LedoitWolf:
+        {
+            // Simplified Ledoit-Wolf shrinkage
+            double trace = cov.trace();
+            double mu = trace / cov.rows();
+            
+            // Estimate optimal shrinkage parameter (simplified version)
+            double alpha2 = 0.0;
+            double delta = 0.0;
+            
+            for (int i = 0; i < cov.rows(); ++i) {
+                for (int j = 0; j < cov.cols(); ++j) {
+                    if (i == j) {
+                        delta += (cov(i, j) - mu) * (cov(i, j) - mu);
+                    } else {
+                        alpha2 += cov(i, j) * cov(i, j);
+                        delta += cov(i, j) * cov(i, j);
+                    }
+                }
+            }
+            
+            double shrinkage = std::min(1.0, alpha2 / delta);
+            Eigen::MatrixXd identity = Eigen::MatrixXd::Identity(cov.rows(), cov.cols());
+            reg_cov = (1.0 - shrinkage) * cov + shrinkage * mu * identity;
+            break;
+        }
+    }
+    
+    return reg_cov;
+}
+
+//=============================================================================================================
+
+std::vector<int> CSP::selectComponents(const Eigen::VectorXd& eigenvalues) const
+{
+    std::vector<int> indices;
+    int n_channels = eigenvalues.size();
+    int n_pick = std::min(m_iNComponents, n_channels);
+    
+    if (m_strComponentSelection == "extremes") {
+        // Take components from both extremes
+        int n_bottom = n_pick / 2;
+        int n_top = n_pick - n_bottom;
+        
+        // Eigenvalues are in ascending order
+        // Top eigenvalues (largest)
+        for (int i = 0; i < n_top; ++i) {
+            indices.push_back(n_channels - 1 - i);
+        }
+        // Bottom eigenvalues (smallest)
+        for (int i = 0; i < n_bottom; ++i) {
+            indices.push_back(i);
+        }
+    } else if (m_strComponentSelection == "top") {
+        // Take only top eigenvalues
+        for (int i = 0; i < n_pick; ++i) {
+            indices.push_back(n_channels - 1 - i);
+        }
+    } else if (m_strComponentSelection == "bottom") {
+        // Take only bottom eigenvalues
+        for (int i = 0; i < n_pick; ++i) {
+            indices.push_back(i);
+        }
+    }
+    
+    return indices;
 }
 
 //=============================================================================================================
@@ -46,9 +145,6 @@ bool CSP::fit(const std::vector<Eigen::MatrixXd>& epochs, const std::vector<int>
     }
 
     int n_channels = epochs[0].rows();
-    
-    // 1. Compute average covariance matrices for each class
-    // Assuming binary classification with labels 0 and 1 (or any two distinct values)
     
     // Find unique labels
     std::vector<int> unique_labels = labels;
@@ -66,7 +162,6 @@ bool CSP::fit(const std::vector<Eigen::MatrixXd>& epochs, const std::vector<int>
     int n_b = 0;
     
     int label_a = unique_labels[0];
-    // int label_b = unique_labels[1];
     
     for (size_t i = 0; i < epochs.size(); ++i) {
         if (epochs[i].rows() != n_channels) {
@@ -88,34 +183,29 @@ bool CSP::fit(const std::vector<Eigen::MatrixXd>& epochs, const std::vector<int>
     if (n_a > 0) cov_a /= (double)n_a;
     if (n_b > 0) cov_b /= (double)n_b;
     
-    // 2. Solve Generalized Eigenvalue Problem
-    // cov_a * w = lambda * (cov_a + cov_b) * w
-    // This makes eigenvalues sum to 1 for the two classes if solved properly.
-    // Small lambda -> cov_a small, cov_b large (Class B)
-    // Large lambda -> cov_a large, cov_b small (Class A)
-    
+    // Solve Generalized Eigenvalue Problem
     Eigen::MatrixXd cov_sum = cov_a + cov_b;
-    
-    // Regularize cov_sum to ensure invertibility?
-    // MNE-Python adds a small epsilon * average trace if reg is enabled.
-    // For now, we assume data is full rank.
     
     Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> es(cov_a, cov_sum);
     
+    if (es.info() != Eigen::Success) {
+        std::cerr << "CSP::fit: Eigenvalue decomposition failed." << std::endl;
+        return false;
+    }
+    
     m_vecEigenValues = es.eigenvalues();
-    m_matFilters = es.eigenvectors(); // Columns are eigenvectors
+    m_matFilters = es.eigenvectors();
     
-    // Calculate Patterns: A = (W^T)^-1 = W^-T = (W^-1)^T
-    // Since W^T * C_sum * W = I, W is not necessarily orthogonal, so W^-1 != W^T.
-    // A = (W^-1)^T. 
-    // In Eigen, we can invert m_matFilters.
-    m_matPatterns = m_matFilters.inverse().transpose();
+    // Select components
+    m_vecSelectedIndices = selectComponents(m_vecEigenValues);
     
-    // Transpose filters to match MNE-Python convention if needed?
-    // MNE-Python: filters_ (n_channels, n_channels)
-    // transform: np.dot(filters_.T, X)
-    // So filters_ columns are the filters.
-    // Eigen eigenvectors are columns. So m_matFilters matches MNE-Python.
+    // Calculate patterns
+    try {
+        m_matPatterns = m_matFilters.inverse().transpose();
+    } catch (const std::exception& e) {
+        std::cerr << "CSP::fit: Failed to compute patterns: " << e.what() << std::endl;
+        return false;
+    }
     
     return true;
 }
@@ -124,70 +214,31 @@ bool CSP::fit(const std::vector<Eigen::MatrixXd>& epochs, const std::vector<int>
 
 Eigen::MatrixXd CSP::transform(const std::vector<Eigen::MatrixXd>& epochs) const
 {
-    if (epochs.empty()) {
+    if (epochs.empty() || m_vecSelectedIndices.empty()) {
         return Eigen::MatrixXd();
     }
     
     int n_epochs = epochs.size();
-    int n_channels = m_matFilters.rows();
+    int n_components = m_vecSelectedIndices.size();
     
-    // Select filters
-    // Eigen returns eigenvalues in ascending order.
-    // We want the extreme components.
-    // n_components usually 4 -> take 0, 1 (Smallest) and N-1, N-2 (Largest)
-    
-    std::vector<int> pick_indices;
-    int n_pick = m_iNComponents;
-    if (n_pick > n_channels) n_pick = n_channels;
-    
-    // Logic to pick indices: [0, 1, ..., k-1] + [N-k, ..., N-1]
-    // Note: If n_pick is odd, we might favor one side. MNE-Python usually assumes even or takes equal from both.
-    
-    int n_bottom = n_pick / 2;
-    int n_top = n_pick - n_bottom;
-    
-    // Eigenvalues are ascending.
-    // Index 0: Smallest lambda (Class B dominant)
-    // Index N-1: Largest lambda (Class A dominant)
-    
-    // Indices from top (Largest)
-    for (int i = 0; i < n_top; ++i) {
-        pick_indices.push_back(n_channels - 1 - i);
-    }
-    // Indices from bottom (Smallest)
-    for (int i = 0; i < n_bottom; ++i) {
-        pick_indices.push_back(i);
+    // Build projection matrix
+    Eigen::MatrixXd W_selected(m_matFilters.rows(), n_components);
+    for (int i = 0; i < n_components; ++i) {
+        W_selected.col(i) = m_matFilters.col(m_vecSelectedIndices[i]);
     }
     
-    // Build projection matrix W_pick (n_channels x n_pick)
-    Eigen::MatrixXd W_pick(n_channels, n_pick);
-    for (int i = 0; i < n_pick; ++i) {
-        W_pick.col(i) = m_matFilters.col(pick_indices[i]);
-    }
-    
-    // Features matrix: n_epochs x n_pick
-    Eigen::MatrixXd features(n_epochs, n_pick);
+    Eigen::MatrixXd features(n_epochs, n_components);
     
     for (int i = 0; i < n_epochs; ++i) {
-        // Project: Z = W^T * X
-        // X is (n_channels, n_times)
-        // W_pick is (n_channels, n_pick)
-        // Z should be (n_pick, n_times)
-        // Z = W_pick.transpose() * X
+        // Project data
+        Eigen::MatrixXd Z = W_selected.transpose() * epochs[i];
         
-        Eigen::MatrixXd Z = W_pick.transpose() * epochs[i];
-        
-        // Compute Variance (mean of squared signal, assuming zero mean)
-        // Or row-wise variance properly.
-        // MNE-Python: (Z**2).mean(axis=1)
-        
-        for (int k = 0; k < n_pick; ++k) {
-            double var = Z.row(k).squaredNorm() / (double)Z.cols(); // mean of squares
-            // If we didn't remove mean in Z, this is second moment, not variance.
-            // But CSP filters usually output zero-mean signals if input is zero-mean.
+        // Compute variance for each component
+        for (int k = 0; k < n_components; ++k) {
+            double var = Z.row(k).squaredNorm() / (double)Z.cols();
             
             if (m_bLog) {
-                features(i, k) = std::log(var);
+                features(i, k) = std::log(std::max(var, 1e-12)); // Avoid log(0)
             } else {
                 features(i, k) = var;
             }
@@ -195,6 +246,186 @@ Eigen::MatrixXd CSP::transform(const std::vector<Eigen::MatrixXd>& epochs) const
     }
     
     return features;
+}
+
+//=============================================================================================================
+
+Eigen::MatrixXd CSP::fitTransform(const std::vector<Eigen::MatrixXd>& epochs, 
+                                 const std::vector<int>& labels)
+{
+    if (!fit(epochs, labels)) {
+        return Eigen::MatrixXd();
+    }
+    return transform(epochs);
+}
+
+//=============================================================================================================
+// SPoC Implementation
+//=============================================================================================================
+
+SPoC::SPoC(int n_components, bool norm_trace, bool log, double reg_param)
+: m_iNComponents(n_components)
+, m_bNormTrace(norm_trace)
+, m_bLog(log)
+, m_dRegParam(reg_param)
+{
+}
+
+//=============================================================================================================
+
+Eigen::MatrixXd SPoC::computeCovariance(const Eigen::MatrixXd& epoch) const
+{
+    Eigen::MatrixXd centered = epoch.colwise() - epoch.rowwise().mean();
+    Eigen::MatrixXd cov = (centered * centered.transpose()) / (double)(epoch.cols() - 1);
+    
+    if (m_bNormTrace) {
+        double trace = cov.trace();
+        if (trace > 1e-12) {
+            cov /= trace;
+        }
+    }
+    
+    // Add regularization
+    if (m_dRegParam > 0.0) {
+        double trace = cov.trace();
+        cov += m_dRegParam * trace / cov.rows() * Eigen::MatrixXd::Identity(cov.rows(), cov.cols());
+    }
+    
+    return cov;
+}
+
+//=============================================================================================================
+
+Eigen::MatrixXd SPoC::computeWeightedCovariance(const std::vector<Eigen::MatrixXd>& epochs,
+                                               const Eigen::VectorXd& weights) const
+{
+    if (epochs.empty() || weights.size() != epochs.size()) {
+        return Eigen::MatrixXd();
+    }
+    
+    int n_channels = epochs[0].rows();
+    Eigen::MatrixXd weighted_cov = Eigen::MatrixXd::Zero(n_channels, n_channels);
+    double weight_sum = 0.0;
+    
+    for (size_t i = 0; i < epochs.size(); ++i) {
+        Eigen::MatrixXd cov = computeCovariance(epochs[i]);
+        weighted_cov += weights(i) * cov;
+        weight_sum += weights(i);
+    }
+    
+    if (weight_sum > 1e-12) {
+        weighted_cov /= weight_sum;
+    }
+    
+    return weighted_cov;
+}
+
+//=============================================================================================================
+
+bool SPoC::fit(const std::vector<Eigen::MatrixXd>& epochs, const Eigen::VectorXd& target)
+{
+    if (epochs.empty() || target.size() != epochs.size()) {
+        std::cerr << "SPoC::fit: Empty epochs or size mismatch." << std::endl;
+        return false;
+    }
+    
+    int n_channels = epochs[0].rows();
+    
+    // Normalize target values to zero mean and unit variance
+    double target_mean = target.mean();
+    Eigen::VectorXd centered_target = target.array() - target_mean;
+    double target_std = std::sqrt(centered_target.squaredNorm() / (target.size() - 1));
+    
+    if (target_std < 1e-12) {
+        std::cerr << "SPoC::fit: Target has zero variance." << std::endl;
+        return false;
+    }
+    
+    Eigen::VectorXd normalized_target = centered_target / target_std;
+    
+    // Compute average covariance matrix
+    Eigen::MatrixXd cov_avg = Eigen::MatrixXd::Zero(n_channels, n_channels);
+    for (size_t i = 0; i < epochs.size(); ++i) {
+        cov_avg += computeCovariance(epochs[i]);
+    }
+    cov_avg /= (double)epochs.size();
+    
+    // Compute target-weighted covariance matrix
+    Eigen::VectorXd weights = normalized_target.array().abs();
+    Eigen::MatrixXd cov_weighted = computeWeightedCovariance(epochs, weights);
+    
+    // Solve generalized eigenvalue problem
+    Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> es(cov_weighted, cov_avg);
+    
+    if (es.info() != Eigen::Success) {
+        std::cerr << "SPoC::fit: Eigenvalue decomposition failed." << std::endl;
+        return false;
+    }
+    
+    m_vecEigenValues = es.eigenvalues();
+    m_matFilters = es.eigenvectors();
+    
+    // Take the top components (largest eigenvalues)
+    // Eigenvalues are in ascending order, so take the last n_components
+    int n_pick = std::min(m_iNComponents, n_channels);
+    Eigen::MatrixXd selected_filters(n_channels, n_pick);
+    for (int i = 0; i < n_pick; ++i) {
+        selected_filters.col(i) = m_matFilters.col(n_channels - 1 - i);
+    }
+    m_matFilters = selected_filters;
+    
+    // Calculate patterns
+    try {
+        m_matPatterns = m_matFilters.inverse().transpose();
+    } catch (const std::exception& e) {
+        std::cerr << "SPoC::fit: Failed to compute patterns: " << e.what() << std::endl;
+        return false;
+    }
+    
+    return true;
+}
+
+//=============================================================================================================
+
+Eigen::MatrixXd SPoC::transform(const std::vector<Eigen::MatrixXd>& epochs) const
+{
+    if (epochs.empty() || m_matFilters.cols() == 0) {
+        return Eigen::MatrixXd();
+    }
+    
+    int n_epochs = epochs.size();
+    int n_components = m_matFilters.cols();
+    
+    Eigen::MatrixXd features(n_epochs, n_components);
+    
+    for (int i = 0; i < n_epochs; ++i) {
+        // Project data
+        Eigen::MatrixXd Z = m_matFilters.transpose() * epochs[i];
+        
+        // Compute variance for each component
+        for (int k = 0; k < n_components; ++k) {
+            double var = Z.row(k).squaredNorm() / (double)Z.cols();
+            
+            if (m_bLog) {
+                features(i, k) = std::log(std::max(var, 1e-12)); // Avoid log(0)
+            } else {
+                features(i, k) = var;
+            }
+        }
+    }
+    
+    return features;
+}
+
+//=============================================================================================================
+
+Eigen::MatrixXd SPoC::fitTransform(const std::vector<Eigen::MatrixXd>& epochs, 
+                                  const Eigen::VectorXd& target)
+{
+    if (!fit(epochs, target)) {
+        return Eigen::MatrixXd();
+    }
+    return transform(epochs);
 }
 
 } // namespace DECODINGLIB

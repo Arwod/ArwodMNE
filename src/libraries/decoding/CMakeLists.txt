@@ -13,11 +13,15 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS}
 set(SOURCES
     decoding_global.cpp
     csp.cpp
+    temporal_decoding.cpp
+    spatial_filtering.cpp
 )
 
 set(HEADERS
     decoding_global.h
     csp.h
+    temporal_decoding.h
+    spatial_filtering.h
 )
 
 set(FILE_TO_UPDATE decoding_global.cpp)
@@ -33,7 +37,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC ../)
 set(QT_REQUIRED_COMPONENT_LIBS ${QT_REQUIRED_COMPONENTS})
 list(TRANSFORM QT_REQUIRED_COMPONENT_LIBS PREPEND "Qt${QT_VERSION_MAJOR}::")
 
-set(MNE_LIBS_REQUIRED 
+set(MNE_LIBS_REQUIRED
     mne_utils
     mne_fiff
 )

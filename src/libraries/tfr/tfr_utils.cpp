@@ -187,3 +187,70 @@ std::pair<Eigen::MatrixXd, Eigen::VectorXd> TFRUtils::dpss_windows(int N, double
 }
 
 } // NAMESPACE
+std::vector<Eigen::VectorXcd> TFRLIB::TFRUtils::morlet_variable(double sfreq,
+                                                        const Eigen::VectorXd& freqs,
+                                                        const Eigen::VectorXd& n_cycles,
+                                                        double sigma,
+                                                        bool zero_mean)
+{
+    if (freqs.size() != n_cycles.size()) {
+        throw std::invalid_argument("freqs and n_cycles must have the same size");
+    }
+
+    std::vector<Eigen::VectorXcd> wavelets;
+    wavelets.reserve(freqs.size());
+
+    for (int i = 0; i < freqs.size(); ++i) {
+        double f = freqs[i];
+        double this_n_cycles = n_cycles[i];
+        double sigma_t;
+        
+        if (sigma == 0.0) {
+            sigma_t = this_n_cycles / (2.0 * M_PI * f);
+        } else {
+            sigma_t = this_n_cycles / (2.0 * M_PI * sigma);
+        }
+
+        double step = 1.0 / sfreq;
+        double limit = 5.0 * sigma_t;
+        
+        std::vector<double> t_half;
+        for (double t = 0.0; t < limit; t += step) {
+            t_half.push_back(t); 
+        }
+        
+        int n_half = t_half.size();
+        int n_total = (n_half * 2) - 1; 
+        
+        Eigen::VectorXcd W(n_total);
+        
+        for (int k = 0; k < n_total; ++k) {
+            double t_val;
+            if (k < n_half - 1) {
+                t_val = -t_half[n_half - 1 - k];
+            } else {
+                t_val = t_half[k - (n_half - 1)];
+            }
+            
+            std::complex<double> oscillation = std::exp(std::complex<double>(0.0, 2.0 * M_PI * f * t_val));
+            
+            if (zero_mean) {
+                 double real_offset = std::exp(-2.0 * std::pow(M_PI * f * sigma_t, 2));
+                 oscillation -= std::complex<double>(real_offset, 0.0);
+            }
+            
+            double gaussian_envelope = std::exp(-(t_val * t_val) / (2.0 * sigma_t * sigma_t));
+            
+            W[k] = oscillation * gaussian_envelope;
+        }
+        
+        // Normalization
+        double norm = W.norm();
+        double factor = std::sqrt(0.5) * norm;
+        W /= factor;
+
+        wavelets.push_back(W);
+    }
+
+    return wavelets;
+}
