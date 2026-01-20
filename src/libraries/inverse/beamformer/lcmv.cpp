@@ -205,10 +205,10 @@ BeamformerWeights LCMV::make_lcmv(
     // 3. Choose computation method
     if (inversion == "matrix") {
         res = compute_matrix_inversion_weights(weighted_leadfield, data_cov, noise_cov, 
-                                             reg, weight_norm, n_ori);
+                                             reg, weight_norm, n_ori, pick_ori);
     } else if (inversion == "single") {
         res = compute_single_dipole_weights(weighted_leadfield, data_cov, noise_cov, 
-                                          reg, weight_norm, n_ori);
+                                          reg, weight_norm, n_ori, pick_ori);
     } else {
         std::cerr << "LCMV::make_lcmv: Unknown inversion method: " << inversion << std::endl;
         return res;
@@ -418,7 +418,8 @@ BeamformerWeights LCMV::compute_matrix_inversion_weights(
     const Covariance& noise_cov,
     double reg,
     const std::string& weight_norm,
-    int n_ori)
+    int n_ori,
+    const std::string& pick_ori)
 {
     BeamformerWeights res;
     
@@ -448,7 +449,7 @@ BeamformerWeights LCMV::compute_matrix_inversion_weights(
     
     // Apply orientation selection and normalization
     res = apply_orientation_selection_and_normalization(
-        W_all, leadfield, data_cov, noise_cov, weight_norm, n_ori, "vector");
+        W_all, leadfield, data_cov, noise_cov, weight_norm, n_ori, pick_ori);
     
     return res;
 }
@@ -459,7 +460,8 @@ BeamformerWeights LCMV::compute_single_dipole_weights(
     const Covariance& noise_cov,
     double reg,
     const std::string& weight_norm,
-    int n_ori)
+    int n_ori,
+    const std::string& pick_ori)
 {
     BeamformerWeights res;
     
@@ -494,7 +496,7 @@ BeamformerWeights LCMV::compute_single_dipole_weights(
     
     // Apply orientation selection and normalization
     res = apply_orientation_selection_and_normalization(
-        W_out, leadfield, data_cov, noise_cov, weight_norm, n_ori, "vector");
+        W_out, leadfield, data_cov, noise_cov, weight_norm, n_ori, pick_ori);
     
     return res;
 }

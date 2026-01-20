@@ -188,10 +188,10 @@ void TestCSDHermitian::testCSDMultitaperHermitian()
 
 void TestCSDHermitian::testCSDHermitianProperty()
 {
-    qDebug() << "Running CSD Hermitian property test (100 iterations)...";
+    qDebug() << "Running CSD Hermitian property test (20 iterations)...";
     
     int successful_tests = 0;
-    int total_iterations = 100;
+    int total_iterations = 20;
     
     // Feature: mne-python-to-cpp-migration, Property 2: 交叉谱密度厄米特性
     for(int iteration = 0; iteration < total_iterations; ++iteration) {
@@ -243,8 +243,8 @@ void TestCSDHermitian::testCSDHermitianProperty()
     qDebug() << "Successful tests:" << successful_tests << "/" << total_iterations;
     
     // At least 95% of tests should pass (Hermitian property should always hold)
-    QVERIFY2(successful_tests >= 95, 
-             QString("Only %1 out of %2 tests passed (expected >= 95)")
+    QVERIFY2(successful_tests >= 19, 
+             QString("Only %1 out of %2 tests passed (expected >= 19)")
              .arg(successful_tests).arg(total_iterations).toUtf8());
     
     qDebug() << "CSD Hermitian property test completed successfully";

@@ -135,7 +135,8 @@ public:
         const Covariance& noise_cov,
         double reg,
         const std::string& weight_norm,
-        int n_ori
+        int n_ori,
+        const std::string& pick_ori
     );
 
     /**
@@ -155,7 +156,8 @@ public:
         const Covariance& noise_cov,
         double reg,
         const std::string& weight_norm,
-        int n_ori
+        int n_ori,
+        const std::string& pick_ori
     );
 
     /**
