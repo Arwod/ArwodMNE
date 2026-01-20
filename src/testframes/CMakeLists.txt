@@ -84,4 +84,5 @@ add_subdirectory(test_data_compatibility)
 add_subdirectory(test_montage_distance_preservation)
 add_subdirectory(test_channel_management)
 add_subdirectory(test_granger_causality)
+add_subdirectory(test_fir_linear_phase)
 
