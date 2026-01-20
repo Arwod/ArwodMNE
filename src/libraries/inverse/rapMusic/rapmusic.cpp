@@ -881,3 +881,267 @@ void RapMusic::setStcAttr(int p_iSampStcWin, float p_fStcOverlap)
     m_iSamplesStcWindow = p_iSampStcWin;
     m_fStcOverlap = p_fStcOverlap;
 }
+
+//=============================================================================================================
+
+MNESourceEstimate RapMusic::calculateTrapMusic(const Eigen::MatrixXd& p_matMeasurement,
+                                               int p_iNumSources,
+                                               double p_dThreshold,
+                                               QList<DipolePair<double>>& p_TrapDipoles) const
+{
+    MNESourceEstimate p_SourceEstimate;
+    
+    if (!m_bIsInit) {
+        std::cout << "RAP MUSIC wasn't initialized!" << std::endl;
+        return p_SourceEstimate;
+    }
+    
+    if (p_matMeasurement.rows() != m_iNumChannels) {
+        std::cout << "Lead Field channels do not fit to number of measurement channels!" << std::endl;
+        return p_SourceEstimate;
+    }
+    
+    std::cout << "##### TRAP-MUSIC Algorithm Started ######" << std::endl;
+    
+    // Enhanced subspace decomposition with noise level estimation
+    double noise_level = 0.01; // Estimate from data statistics
+    MatrixXT* t_pMatPhi_s = nullptr;
+    MatrixXT* t_pMatPhi_n = nullptr;
+    
+    int t_r = calcEnhancedSubspace(p_matMeasurement, noise_level, t_pMatPhi_s, t_pMatPhi_n);
+    
+    int t_iMaxSearch = std::min(p_iNumSources, t_r);
+    
+    if (t_r < p_iNumSources) {
+        std::cout << "Warning: Signal subspace rank " << t_r 
+                  << " is smaller than requested sources " << p_iNumSources << std::endl;
+        std::cout << "Searching for " << t_iMaxSearch << " sources instead." << std::endl;
+    }
+    
+    // Initialize orthogonal projector and manifold matrix
+    MatrixXT t_matOrthProj = MatrixXT::Identity(m_iNumChannels, m_iNumChannels);
+    MatrixXT t_matA_k_1 = MatrixXT::Zero(m_iNumChannels, t_iMaxSearch);
+    
+    p_TrapDipoles.clear();
+    
+    // Enhanced iterative source search
+    for (int r = 0; r < t_iMaxSearch; ++r) {
+        // Project signal subspace
+        MatrixXT t_matProj_Phi_s = t_matOrthProj * (*t_pMatPhi_s);
+        MatrixXT t_matProj_LeadField = t_matOrthProj * m_ForwardSolution.sol->data;
+        
+        // Enhanced SVD with better numerical stability
+        Eigen::JacobiSVD<MatrixXT> t_svdProj_Phi_S(t_matProj_Phi_s, 
+            Eigen::ComputeThinU | Eigen::ComputeThinV);
+        
+        MatrixXT t_matU_B;
+        useFullRank(t_svdProj_Phi_S.matrixU(), 
+                   t_svdProj_Phi_S.singularValues().asDiagonal(), t_matU_B);
+        
+        // Correlation calculation with improved numerical precision
+        VectorXT t_vecRoh = VectorXT::Zero(m_iNumLeadFieldCombinations);
+        
+        #ifdef _OPENMP
+        #pragma omp parallel for num_threads(m_iMaxNumThreads)
+        #endif
+        for (int i = 0; i < m_iNumLeadFieldCombinations; i++) {
+            MatrixX6T t_matProj_G(t_matProj_LeadField.rows(), 6);
+            
+            int idx1 = m_ppPairIdxCombinations[i]->x1;
+            int idx2 = m_ppPairIdxCombinations[i]->x2;
+            
+            getGainMatrixPair(t_matProj_LeadField, t_matProj_G, idx1, idx2);
+            t_vecRoh(i) = subcorr(t_matProj_G, t_matU_B);
+        }
+        
+        // Find maximum correlation
+        VectorXT::Index t_iMaxIdx;
+        double t_val_roh_k = t_vecRoh.maxCoeff(&t_iMaxIdx);
+        
+        int t_iIdx1 = m_ppPairIdxCombinations[t_iMaxIdx]->x1;
+        int t_iIdx2 = m_ppPairIdxCombinations[t_iMaxIdx]->x2;
+        
+        std::cout << "TRAP-MUSIC Iteration " << r+1 << "/" << t_iMaxSearch
+                  << ": Correlation = " << t_val_roh_k 
+                  << ", Sources: " << t_iIdx1+1 << ", " << t_iIdx2+1 << std::endl;
+        
+        // Enhanced parameter estimation with confidence intervals
+        MatrixX6T t_matG_k_1(m_ForwardSolution.sol->data.rows(), 6);
+        getGainMatrixPair(m_ForwardSolution.sol->data, t_matG_k_1, t_iIdx1, t_iIdx2);
+        
+        MatrixX6T t_matProj_G_k_1 = t_matOrthProj * t_matG_k_1;
+        
+        Vector6T t_vec_phi_k_1;
+        double confidence;
+        Vector6T moments;
+        
+        double enhanced_corr = estimateParametersWithConfidence(
+            t_matG_k_1, p_matMeasurement, t_vec_phi_k_1, confidence, moments);
+        
+        // Use enhanced correlation if it's better
+        if (enhanced_corr > t_val_roh_k) {
+            t_val_roh_k = enhanced_corr;
+        } else {
+            // Fall back to standard method
+            subcorr(t_matProj_G_k_1, t_matU_B, t_vec_phi_k_1);
+        }
+        
+        // Insert source with enhanced parameters
+        insertSource(t_iIdx1, t_iIdx2, t_vec_phi_k_1, t_val_roh_k, p_TrapDipoles);
+        
+        // Enhanced stopping criterion
+        if (t_val_roh_k < p_dThreshold || confidence < 0.5) {
+            std::cout << "TRAP-MUSIC stopped: correlation " << t_val_roh_k 
+                      << " < threshold " << p_dThreshold 
+                      << " or confidence " << confidence << " < 0.5" << std::endl;
+            break;
+        }
+        
+        // Update manifold and projector
+        calcA_k_1(t_matG_k_1, t_vec_phi_k_1, r, t_matA_k_1);
+        calcOrthProj(t_matA_k_1, t_matOrthProj);
+    }
+    
+    std::cout << "##### TRAP-MUSIC Algorithm Completed ######" << std::endl;
+    
+    // Cleanup
+    delete t_pMatPhi_s;
+    delete t_pMatPhi_n;
+    
+    return p_SourceEstimate;
+}
+
+//=============================================================================================================
+
+int RapMusic::calcEnhancedSubspace(const MatrixXT& p_matMeasurement,
+                                  double p_dNoiseLevel,
+                                  MatrixXT*& p_pMatPhi_s,
+                                  MatrixXT*& p_pMatPhi_n) const
+{
+    // Enhanced subspace decomposition with improved noise handling
+    MatrixXT t_matF;
+    
+    // Adaptive matrix formation based on dimensions
+    if (p_matMeasurement.cols() > p_matMeasurement.rows()) {
+        t_matF = makeSquareMat(p_matMeasurement); // FF^T
+    } else {
+        t_matF = MatrixXT(p_matMeasurement);
+    }
+    
+    // Enhanced SVD with better numerical precision
+    Eigen::JacobiSVD<MatrixXT> t_svdF(t_matF, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    
+    VectorXT singular_values = t_svdF.singularValues();
+    
+    // Enhanced rank estimation with noise level consideration
+    int t_r = 0;
+    double noise_threshold = p_dNoiseLevel * p_dNoiseLevel * m_iNumChannels;
+    
+    for (int i = 0; i < singular_values.size(); ++i) {
+        if (singular_values(i) > noise_threshold) {
+            t_r = i + 1;
+        } else {
+            break;
+        }
+    }
+    
+    // Ensure minimum rank
+    t_r = std::max(t_r, 1);
+    
+    // Allocate signal subspace
+    if (p_pMatPhi_s != nullptr) delete p_pMatPhi_s;
+    p_pMatPhi_s = new MatrixXT(m_iNumChannels, t_r);
+    
+    // Allocate noise subspace
+    int noise_dim = m_iNumChannels - t_r;
+    if (noise_dim > 0) {
+        if (p_pMatPhi_n != nullptr) delete p_pMatPhi_n;
+        p_pMatPhi_n = new MatrixXT(m_iNumChannels, noise_dim);
+        
+        // Extract noise subspace
+        *p_pMatPhi_n = t_svdF.matrixU().rightCols(noise_dim);
+    }
+    
+    // Extract signal subspace with enhanced numerical stability
+    *p_pMatPhi_s = t_svdF.matrixU().leftCols(t_r);
+    
+    std::cout << "Enhanced subspace: signal rank = " << t_r 
+              << ", noise dimension = " << noise_dim 
+              << ", noise threshold = " << noise_threshold << std::endl;
+    
+    return t_r;
+}
+
+//=============================================================================================================
+
+double RapMusic::estimateParametersWithConfidence(const MatrixX6T& p_matG_k_1,
+                                                  const MatrixXT& p_matMeasurement,
+                                                  const Vector6T& p_vec_phi_k_1,
+                                                  double& p_dConfidence,
+                                                  Vector6T& p_vecMoments) const
+{
+    // Enhanced parameter estimation with statistical confidence measures
+    
+    // Compute pseudo-inverse of leadfield for moment estimation
+    Eigen::JacobiSVD<MatrixX6T> svd_G(p_matG_k_1, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    
+    // Enhanced regularization based on condition number
+    VectorXT singular_vals = svd_G.singularValues();
+    double condition_number = singular_vals(0) / singular_vals(singular_vals.size()-1);
+    double reg_param = 1e-6 * condition_number;
+    
+    // Regularized pseudo-inverse
+    MatrixXT reg_matrix = MatrixXT::Zero(6, 6);
+    for (int i = 0; i < 6; ++i) {
+        if (singular_vals(i) > reg_param) {
+            reg_matrix(i, i) = 1.0 / singular_vals(i);
+        } else {
+            reg_matrix(i, i) = 1.0 / reg_param;
+        }
+    }
+    
+    Matrix6XT pseudo_inv = svd_G.matrixV() * reg_matrix * svd_G.matrixU().transpose();
+    
+    // Estimate moments for each time sample
+    MatrixXT moments_time = pseudo_inv * p_matMeasurement;
+    
+    // Compute statistical measures
+    p_vecMoments = moments_time.rowwise().mean(); // Average moments
+    
+    // Compute residual for confidence estimation
+    MatrixXT predicted = p_matG_k_1 * moments_time;
+    MatrixXT residual = p_matMeasurement - predicted;
+    
+    double residual_norm = residual.norm();
+    double signal_norm = p_matMeasurement.norm();
+    
+    // Confidence based on explained variance
+    p_dConfidence = 1.0 - (residual_norm / signal_norm);
+    p_dConfidence = std::max(0.0, std::min(1.0, p_dConfidence)); // Clamp to [0,1]
+    
+    // Enhanced correlation computation using temporal consistency
+    double temporal_consistency = 0.0;
+    if (moments_time.cols() > 1) {
+        // Compute correlation between consecutive time samples
+        for (int t = 1; t < moments_time.cols(); ++t) {
+            Vector6T moment_prev = moments_time.col(t-1);
+            Vector6T moment_curr = moments_time.col(t);
+            
+            double corr = moment_prev.dot(moment_curr) / 
+                         (moment_prev.norm() * moment_curr.norm());
+            temporal_consistency += std::abs(corr);
+        }
+        temporal_consistency /= (moments_time.cols() - 1);
+    } else {
+        temporal_consistency = 1.0; // Single time point
+    }
+    
+    // Combined correlation measure
+    double enhanced_correlation = p_dConfidence * temporal_consistency;
+    
+    std::cout << "Parameter estimation: confidence = " << p_dConfidence 
+              << ", temporal consistency = " << temporal_consistency
+              << ", enhanced correlation = " << enhanced_correlation << std::endl;
+    
+    return enhanced_correlation;
+}

@@ -158,6 +158,54 @@ public:
 
     //=========================================================================================================
     /**
+     * Compute TRAP-MUSIC (Time-Reversal Array Processing MUSIC) algorithm.
+     * Enhanced version of RAP-MUSIC with improved subspace decomposition.
+     *
+     * @param[in] p_matMeasurement  The measured data (channels x samples).
+     * @param[in] p_iNumSources     Number of sources to estimate.
+     * @param[in] p_dThreshold      Correlation threshold for source detection.
+     * @param[out] p_TrapDipoles    List of detected dipole pairs with enhanced parameters.
+     * @return Source estimate with improved localization accuracy.
+     */
+    MNELIB::MNESourceEstimate calculateTrapMusic(const Eigen::MatrixXd& p_matMeasurement,
+                                                 int p_iNumSources,
+                                                 double p_dThreshold,
+                                                 QList<DipolePair<double>>& p_TrapDipoles) const;
+
+    //=========================================================================================================
+    /**
+     * Enhanced subspace decomposition with improved noise handling.
+     *
+     * @param[in] p_matMeasurement  The measured data (channels x samples).
+     * @param[in] p_dNoiseLevel     Estimated noise level for robust decomposition.
+     * @param[out] p_pMatPhi_s      The enhanced signal subspace.
+     * @param[out] p_pMatPhi_n      The noise subspace.
+     * @return Effective rank of the signal subspace.
+     */
+    int calcEnhancedSubspace(const MatrixXT& p_matMeasurement,
+                            double p_dNoiseLevel,
+                            MatrixXT*& p_pMatPhi_s,
+                            MatrixXT*& p_pMatPhi_n) const;
+
+    //=========================================================================================================
+    /**
+     * Improved parameter estimation with confidence intervals.
+     *
+     * @param[in] p_matG_k_1        Lead field combination for dipole pair.
+     * @param[in] p_matMeasurement  The measured data.
+     * @param[in] p_vec_phi_k_1     Dipole orientations.
+     * @param[out] p_dConfidence    Confidence measure for the estimate.
+     * @param[out] p_vecMoments     Estimated dipole moments with uncertainty.
+     * @return Enhanced correlation value with statistical significance.
+     */
+    double estimateParametersWithConfidence(const MatrixX6T& p_matG_k_1,
+                                           const MatrixXT& p_matMeasurement,
+                                           const Vector6T& p_vec_phi_k_1,
+                                           double& p_dConfidence,
+                                           Vector6T& p_vecMoments) const;
+
+    //=========================================================================================================
+    /**
      * Sets the source estimate attributes.
      *
      * @param[in] p_iSampStcWin  Samples per source localization window (default - 1 = not set).

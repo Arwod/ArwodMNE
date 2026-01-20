@@ -11,59 +11,65 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 
 set(SOURCES
-    hpiFit/hpidataupdater.cpp
-    hpiFit/hpimodelparameters.cpp
-    hpiFit/signalmodel.cpp
-    inverse_global.cpp
-    beamformer/covariance.cpp
-    beamformer/lcmv.cpp
-    beamformer/dics.cpp
-    minimumNorm/minimumnorm.cpp
-    rapMusic/rapmusic.cpp
-    rapMusic/pwlrapmusic.cpp
-    rapMusic/dipole.cpp
-    dipoleFit/dipole_fit.cpp
-    dipoleFit/dipole_fit_data.cpp
-    dipoleFit/dipole_fit_settings.cpp
-    dipoleFit/dipole_forward.cpp
-    dipoleFit/ecd.cpp
-    dipoleFit/ecd_set.cpp
-    dipoleFit/guess_data.cpp
-    c/mne_inverse_operator.cpp
-    c/mne_meas_data.cpp
-    c/mne_meas_data_set.cpp
-    hpiFit/hpifit.cpp
-    hpiFit/hpifitdata.cpp
-    hpiFit/sensorset.cpp
+  hpiFit/hpidataupdater.cpp
+  hpiFit/hpimodelparameters.cpp
+  hpiFit/signalmodel.cpp
+  inverse_global.cpp
+  beamformer/covariance.cpp
+  beamformer/lcmv.cpp
+  beamformer/dics.cpp
+  minimumNorm/minimumnorm.cpp
+  minimumNorm/inverse_operator_manager.cpp
+  rapMusic/rapmusic.cpp
+  rapMusic/pwlrapmusic.cpp
+  rapMusic/dipole.cpp
+  dipoleFit/dipole_fit.cpp
+  dipoleFit/dipole_fit_data.cpp
+  dipoleFit/dipole_fit_settings.cpp
+  dipoleFit/dipole_forward.cpp
+  dipoleFit/ecd.cpp
+  dipoleFit/ecd_set.cpp
+  dipoleFit/guess_data.cpp
+  c/mne_inverse_operator.cpp
+  c/mne_meas_data.cpp
+  c/mne_meas_data_set.cpp
+  hpiFit/hpifit.cpp
+  hpiFit/hpifitdata.cpp
+  hpiFit/sensorset.cpp
+  sparseInverse/gamma_map.cpp
+  sparseInverse/mixed_norm.cpp
 )
 
 set(HEADERS
-    hpiFit/hpidataupdater.h
-    hpiFit/hpimodelparameters.h
-    hpiFit/signalmodel.h
-    inverse_global.h
-    IInverseAlgorithm.h
-    beamformer/covariance.h
-    beamformer/lcmv.h
-    beamformer/dics.h
-    minimumNorm/minimumnorm.h
-    rapMusic/rapmusic.h
-    rapMusic/pwlrapmusic.h
-    rapMusic/dipole.h
-    dipoleFit/analyze_types.h
-    dipoleFit/dipole_fit.h
-    dipoleFit/dipole_fit_data.h
-    dipoleFit/dipole_fit_settings.h
-    dipoleFit/dipole_forward.h
-    dipoleFit/ecd.h
-    dipoleFit/ecd_set.h
-    dipoleFit/guess_data.h
-    c/mne_inverse_operator.h
-    c/mne_meas_data.h
-    c/mne_meas_data_set.h
-    hpiFit/hpifit.h
-    hpiFit/hpifitdata.h
-    hpiFit/sensorset.h
+  hpiFit/hpidataupdater.h
+  hpiFit/hpimodelparameters.h
+  hpiFit/signalmodel.h
+  inverse_global.h
+  IInverseAlgorithm.h
+  beamformer/covariance.h
+  beamformer/lcmv.h
+  beamformer/dics.h
+  minimumNorm/minimumnorm.h
+  minimumNorm/inverse_operator_manager.h
+  rapMusic/rapmusic.h
+  rapMusic/pwlrapmusic.h
+  rapMusic/dipole.h
+  dipoleFit/analyze_types.h
+  dipoleFit/dipole_fit.h
+  dipoleFit/dipole_fit_data.h
+  dipoleFit/dipole_fit_settings.h
+  dipoleFit/dipole_forward.h
+  dipoleFit/ecd.h
+  dipoleFit/ecd_set.h
+  dipoleFit/guess_data.h
+  c/mne_inverse_operator.h
+  c/mne_meas_data.h
+  c/mne_meas_data_set.h
+  hpiFit/hpifit.h
+  hpiFit/hpifitdata.h
+  hpiFit/sensorset.h
+  sparseInverse/gamma_map.h
+  sparseInverse/mixed_norm.h
 )
 
 set(FILE_TO_UPDATE inverse_global.cpp)
@@ -77,7 +83,7 @@ add_library(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 set(FFTW_LIBS "")
 
 if(USE_FFTW)
-  if (WIN32)
+  if(WIN32)
     set(FFTW_LIBS
       ${FFTW_DIR_LIBS}/libfftw3-3.dll
       ${FFTW_DIR_LIBS}/libfftw3f-3.dll
@@ -95,31 +101,31 @@ target_include_directories(${PROJECT_NAME} PUBLIC ../)
 set(QT_REQUIRED_COMPONENT_LIBS ${QT_REQUIRED_COMPONENTS})
 list(TRANSFORM QT_REQUIRED_COMPONENT_LIBS PREPEND "Qt${QT_VERSION_MAJOR}::")
 
-set(MNE_LIBS_REQUIRED 
-    mne_utils
-    mne_fiff
-    mne_tfr
-    mne_fs
-    mne_mne
-    mne_fwd
+set(MNE_LIBS_REQUIRED
+  mne_utils
+  mne_fiff
+  mne_tfr
+  mne_fs
+  mne_mne
+  mne_fwd
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    ${QT_REQUIRED_COMPONENT_LIBS}
-    ${MNE_LIBS_REQUIRED}
-    eigen
-    ${FFTW_LIBS})
+  ${QT_REQUIRED_COMPONENT_LIBS}
+  ${MNE_LIBS_REQUIRED}
+  eigen
+  ${FFTW_LIBS})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE MNE_INVERSE_LIBRARY MNE_GIT_HASH_SHORT="${MNE_GIT_HASH_SHORT}" MNE_GIT_HASH_LONG="${MNE_GIT_HASH_LONG}")
 
 if(NOT BUILD_SHARED_LIBS)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE STATICBUILD)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE STATICBUILD)
 endif()
 
 install(FILES
-    inverse_global.h
-    IInverseAlgorithm.h
-    beamformer/covariance.h
-    beamformer/lcmv.h
-    DESTINATION include/libraries/inverse
+  inverse_global.h
+  IInverseAlgorithm.h
+  beamformer/covariance.h
+  beamformer/lcmv.h
+  DESTINATION include/libraries/inverse
 )

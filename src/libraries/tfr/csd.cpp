@@ -1,8 +1,11 @@
 #include "csd.h"
 #include "tfr_utils.h"
 #include <unsupported/Eigen/FFT>
+#include <Eigen/SVD>
+#include <utils/mnemath.h>
 #include <iostream>
 #include <cmath>
+#include <limits>
 #include <QtConcurrent/QtConcurrent>
 
 namespace TFRLIB {
@@ -199,3 +202,217 @@ CSD CSD::compute_multitaper(const std::vector<Eigen::MatrixXd>& epochs,
 }
 
 } // NAMESPACE
+TFRLIB::CSD TFRLIB::CSD::compute_morlet(const std::vector<Eigen::MatrixXd>& epochs,
+                        const Eigen::VectorXd& frequencies,
+                        double sfreq,
+                        double tmin, double tmax,
+                        const Eigen::VectorXd& n_cycles,
+                        bool use_fft,
+                        int decim)
+{
+    CSD csd;
+    if (epochs.empty()) return csd;
+    
+    int n_channels = epochs[0].rows();
+    int n_times = epochs[0].cols();
+    int n_freqs = frequencies.size();
+    
+    // Set up n_cycles
+    Eigen::VectorXd cycles = n_cycles;
+    if (cycles.size() == 0) {
+        cycles = Eigen::VectorXd::Constant(n_freqs, 7.0);
+    } else if (cycles.size() == 1) {
+        cycles = Eigen::VectorXd::Constant(n_freqs, n_cycles(0));
+    } else if (cycles.size() != n_freqs) {
+        throw std::invalid_argument("n_cycles must be scalar or have same length as frequencies");
+    }
+    
+    // Generate Morlet wavelets
+    std::vector<Eigen::VectorXcd> wavelets = TFRUtils::morlet_variable(sfreq, frequencies, cycles);
+    
+    // Initialize CSD data structure
+    csd.freqs.clear();
+    for (int i = 0; i < n_freqs; ++i) {
+        csd.freqs.push_back(frequencies(i));
+    }
+    csd.data.resize(n_freqs);
+    for (int i = 0; i < n_freqs; ++i) {
+        csd.data[i] = Eigen::MatrixXcd::Zero(n_channels, n_channels);
+    }
+    
+    // Process each epoch
+    for (const auto& epoch : epochs) {
+        // Compute time-frequency representation for this epoch
+        std::vector<std::vector<Eigen::VectorXcd>> epoch_tfr(n_channels, std::vector<Eigen::VectorXcd>(n_freqs));
+        
+        for (int ch = 0; ch < n_channels; ++ch) {
+            Eigen::VectorXd signal = epoch.row(ch);
+            
+            for (int f = 0; f < n_freqs; ++f) {
+                const Eigen::VectorXcd& wavelet = wavelets[f];
+                
+                // Complex convolution (simplified)
+                Eigen::VectorXd W_real = wavelet.real();
+                Eigen::VectorXd W_imag = wavelet.imag();
+                
+                // Use existing convolution from MNEMath
+                Eigen::VectorXd conv_r = UTILSLIB::MNEMath::convolve(signal, W_real, std::string("same"));
+                Eigen::VectorXd conv_i = UTILSLIB::MNEMath::convolve(signal, W_imag, std::string("same"));
+                
+                // Construct complex result
+                Eigen::VectorXcd complex_result(conv_r.size());
+                for (int t = 0; t < complex_result.size(); ++t) {
+                    complex_result[t] = std::complex<double>(conv_r[t], conv_i[t]);
+                }
+                
+                epoch_tfr[ch][f] = complex_result;
+            }
+        }
+        
+        // Compute cross-spectral density for this epoch
+        for (int f = 0; f < n_freqs; ++f) {
+            for (int ch1 = 0; ch1 < n_channels; ++ch1) {
+                for (int ch2 = 0; ch2 < n_channels; ++ch2) {
+                    // Compute cross-spectrum between channels
+                    std::complex<double> cross_spectrum(0.0, 0.0);
+                    int n_samples = epoch_tfr[ch1][f].size();
+                    
+                    for (int t = 0; t < n_samples; ++t) {
+                        cross_spectrum += epoch_tfr[ch1][f][t] * std::conj(epoch_tfr[ch2][f][t]);
+                    }
+                    
+                    // Average over time
+                    cross_spectrum /= n_samples;
+                    csd.data[f](ch1, ch2) += cross_spectrum;
+                }
+            }
+        }
+    }
+    
+    // Normalize by number of epochs
+    double n_epochs = static_cast<double>(epochs.size());
+    for (int f = 0; f < n_freqs; ++f) {
+        csd.data[f] /= n_epochs;
+    }
+    
+    return csd;
+}
+
+TFRLIB::CSD TFRLIB::CSD::compute_fourier(const std::vector<Eigen::MatrixXd>& epochs,
+                         double sfreq,
+                         double fmin, double fmax,
+                         double tmin, double tmax,
+                         int n_fft,
+                         double overlap)
+{
+    CSD csd;
+    if (epochs.empty()) return csd;
+    
+    int n_channels = epochs[0].rows();
+    int n_times = epochs[0].cols();
+    
+    if (n_fft < 0) {
+        n_fft = n_times;
+    }
+    
+    // Generate frequency vector
+    int n_freqs_all = n_fft / 2 + 1;
+    std::vector<int> freq_indices;
+    for (int i = 0; i < n_freqs_all; ++i) {
+        double f = static_cast<double>(i) * sfreq / static_cast<double>(n_fft);
+        if (f >= fmin && f <= fmax) {
+            freq_indices.push_back(i);
+            csd.freqs.push_back(f);
+        }
+    }
+    
+    int n_freqs_kept = freq_indices.size();
+    csd.data.resize(n_freqs_kept);
+    for (int i = 0; i < n_freqs_kept; ++i) {
+        csd.data[i] = Eigen::MatrixXcd::Zero(n_channels, n_channels);
+    }
+    
+    // Process each epoch
+    Eigen::FFT<double> fft;
+    
+    for (const auto& epoch : epochs) {
+        // Compute FFT for each channel
+        std::vector<std::vector<std::complex<double>>> channel_ffts(n_channels);
+        
+        for (int ch = 0; ch < n_channels; ++ch) {
+            Eigen::VectorXd signal = epoch.row(ch);
+            
+            // Prepare time domain data
+            std::vector<double> time_domain(n_fft, 0.0);
+            for (int i = 0; i < std::min(n_times, n_fft); ++i) {
+                time_domain[i] = signal[i];
+            }
+            
+            // Compute FFT
+            std::vector<std::complex<double>> freq_domain(n_fft);
+            fft.fwd(freq_domain, time_domain);
+            
+            channel_ffts[ch] = freq_domain;
+        }
+        
+        // Compute cross-spectral density
+        for (int f_idx = 0; f_idx < n_freqs_kept; ++f_idx) {
+            int fft_idx = freq_indices[f_idx];
+            
+            for (int ch1 = 0; ch1 < n_channels; ++ch1) {
+                for (int ch2 = 0; ch2 < n_channels; ++ch2) {
+                    std::complex<double> cross_spectrum = 
+                        channel_ffts[ch1][fft_idx] * std::conj(channel_ffts[ch2][fft_idx]);
+                    
+                    csd.data[f_idx](ch1, ch2) += cross_spectrum;
+                }
+            }
+        }
+    }
+    
+    // Normalize by number of epochs
+    double n_epochs = static_cast<double>(epochs.size());
+    for (int f = 0; f < n_freqs_kept; ++f) {
+        csd.data[f] /= n_epochs;
+    }
+    
+    csd.n_fft = n_fft;
+    return csd;
+}
+
+bool TFRLIB::CSD::verify_hermitian(double tolerance) const
+{
+    for (const auto& matrix : data) {
+        // Check if matrix is Hermitian: A = A^H
+        Eigen::MatrixXcd hermitian_transpose = matrix.adjoint();
+        
+        for (int i = 0; i < matrix.rows(); ++i) {
+            for (int j = 0; j < matrix.cols(); ++j) {
+                std::complex<double> diff = matrix(i, j) - hermitian_transpose(i, j);
+                if (std::abs(diff) > tolerance) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+double TFRLIB::CSD::get_condition_number(double freq) const
+{
+    Eigen::MatrixXcd matrix = get_data(freq);
+    if (matrix.size() == 0) {
+        return -1.0; // Invalid
+    }
+    
+    // Compute SVD to get condition number
+    Eigen::JacobiSVD<Eigen::MatrixXcd> svd(matrix);
+    Eigen::VectorXd singular_values = svd.singularValues();
+    
+    if (singular_values.size() == 0 || singular_values(singular_values.size() - 1) == 0.0) {
+        return std::numeric_limits<double>::infinity();
+    }
+    
+    double condition_number = singular_values(0) / singular_values(singular_values.size() - 1);
+    return condition_number;
+}

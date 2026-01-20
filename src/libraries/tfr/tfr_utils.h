@@ -28,6 +28,22 @@ public:
                                                 bool zero_mean = false);
 
     /**
+     * Creates Morlet wavelets with variable cycles per frequency.
+     *
+     * @param[in] sfreq     Sampling frequency.
+     * @param[in] freqs     Frequencies to compute Morlet wavelets for.
+     * @param[in] n_cycles  Number of cycles per frequency (vector).
+     * @param[in] sigma     Sigma of the envelope (optional).
+     * @param[in] zero_mean Make sure the wavelet has a mean of zero.
+     * @return              List of Morlet wavelets (one per frequency).
+     */
+    static std::vector<Eigen::VectorXcd> morlet_variable(double sfreq,
+                                                         const Eigen::VectorXd& freqs,
+                                                         const Eigen::VectorXd& n_cycles,
+                                                         double sigma = 0.0,
+                                                         bool zero_mean = false);
+
+    /**
      * Creates DPSS (Slepian) windows.
      *
      * @param[in] N     Sequence length.
