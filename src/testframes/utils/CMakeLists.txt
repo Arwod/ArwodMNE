@@ -1,0 +1,7 @@
+add_subdirectory(test_utils_circularbuffer)
+add_subdirectory(test_interpolation)
+add_subdirectory(test_geometryinfo)
+add_subdirectory(test_data_roundtrip)
+add_subdirectory(test_data_io_roundtrip)
+add_subdirectory(test_data_compatibility)
+add_subdirectory(test_verification)

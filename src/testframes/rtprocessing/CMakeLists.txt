@@ -1,0 +1,5 @@
+add_subdirectory(test_rt_pipeline_integration)
+add_subdirectory(test_hpiFit)
+add_subdirectory(test_hpiDataUpdater)
+add_subdirectory(test_hpiFit_integration)
+add_subdirectory(test_hpiModelParameter)

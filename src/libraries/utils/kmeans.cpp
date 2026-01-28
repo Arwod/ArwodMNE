@@ -292,7 +292,7 @@ bool KMeans::calculate(MatrixXd X,
 
             d = VectorXd::Zero(n);
             for(qint32 i = 0; i < n; ++i)
-                d[i] += D.array()(idx[i]*n+i);//Colum Major
+                d[i] += D(i, idx[i]);
 
             sumD = VectorXd::Zero(k);
             for(qint32 i = 0; i < k; ++i)
@@ -448,7 +448,7 @@ bool KMeans::batchUpdate(const MatrixXd& X, MatrixXd& C, VectorXi& idx)
         // Compute the total sum of distances for the current configuration.
         totsumD = 0;
         for(qint32 i = 0; i < n; ++i)
-            totsumD += D.array()(idx[i]*n+i);//Colum Major
+            totsumD += D(i, idx[i]);
         // Test for a cycle: if objective is not decreased, back out
         // the last step and move on to the single update phase
         if(prevtotsumD <= totsumD)
@@ -495,7 +495,7 @@ bool KMeans::batchUpdate(const MatrixXd& X, MatrixXd& C, VectorXi& idx)
             count = 0;
             for(qint32 i = 0; i < moved.rows(); ++i)
             {
-                if(D.array()(previdx[moved[i]] * n + moved[i]) > d[moved[i]])
+                if(D(moved[i], previdx[moved[i]]) > d[moved[i]])
                 {
                     moved_new[count] = moved[i];
                     ++count;
@@ -761,7 +761,7 @@ bool KMeans::onlineUpdate(const MatrixXd& X, MatrixXd& C, VectorXi& idx)
             count = 0;
             for(qint32 i = 0; i < moved.rows(); ++i)
             {
-                if ( Del.array()(previdx[moved(i)]*n + moved(i)) > minDel(moved(i)))
+                if ( Del(moved(i), previdx[moved(i)]) > minDel(moved(i)))
                 {
                     moved_new[count] = moved[i];
                     ++count;

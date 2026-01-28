@@ -1,0 +1,3 @@
+add_subdirectory(test_channel_management)
+add_subdirectory(test_sensorSet)
+add_subdirectory(test_montage_distance_preservation)

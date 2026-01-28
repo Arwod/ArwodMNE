@@ -1,0 +1,3 @@
+add_subdirectory(test_connectivity)
+add_subdirectory(test_spectral_connectivity)
+add_subdirectory(test_granger_causality)

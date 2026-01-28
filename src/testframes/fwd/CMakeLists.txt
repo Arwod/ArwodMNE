@@ -1,0 +1,3 @@
+add_subdirectory(test_mne_forward_solution)
+add_subdirectory(test_forward_solution_linearity)
+add_subdirectory(test_forward_solution_processing)
