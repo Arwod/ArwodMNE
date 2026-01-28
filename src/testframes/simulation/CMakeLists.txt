@@ -1,0 +1,3 @@
+add_subdirectory(test_simulation_statistical_consistency)
+add_subdirectory(test_noise_addition)
+add_subdirectory(test_signalModel)

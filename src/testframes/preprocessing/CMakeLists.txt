@@ -1,0 +1,6 @@
+add_subdirectory(test_artifact_detection)
+add_subdirectory(test_ecg_eog_processing)
+add_subdirectory(test_filtering)
+add_subdirectory(test_fir_linear_phase)
+add_subdirectory(test_ica_invertibility)
+add_subdirectory(test_maxwell_orthogonality)

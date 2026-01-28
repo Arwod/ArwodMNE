@@ -1,0 +1,6 @@
+add_subdirectory(test_tfr_energy_conservation)
+add_subdirectory(test_tfr_stockwell)
+add_subdirectory(test_tfr_multitaper)
+add_subdirectory(test_csd_hermitian)
+add_subdirectory(test_psd_nonnegativity)
+add_subdirectory(test_source_psd)

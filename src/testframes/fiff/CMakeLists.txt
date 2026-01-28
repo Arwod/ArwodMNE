@@ -1,0 +1,6 @@
+add_subdirectory(test_fiff_coord_trans)
+add_subdirectory(test_fiff_rwr)
+add_subdirectory(test_fiff_mne_types_io)
+add_subdirectory(test_fiff_cov)
+add_subdirectory(test_fiff_digitizer)
+add_subdirectory(test_edf2fiff_rwr)
