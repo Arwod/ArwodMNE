@@ -5,6 +5,29 @@ project(mne_cpp LANGUAGES CXX)
 set(MIN_QT5_VERSION 5.10)
 
 ##==============================================================================
+## Compiler support checks
+##==============================================================================
+
+if(MSVC)
+    if(MSVC_VERSION LESS 1900)
+        message(FATAL_ERROR "MSVC version must be 2015 (19.0) or later.")
+    endif()
+    add_compile_options(/bigobj)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "5.3.1")
+        message(FATAL_ERROR "GCC version must be 5.3.1 or later.")
+    endif()
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "3.5")
+        message(FATAL_ERROR "Clang version must be 3.5 or later.")
+    endif()
+endif()
+
+if(WIN32)
+    add_compile_definitions(NOMINMAX)
+endif()
+
+##==============================================================================
 ## Global build options
 
 # Upgrade to C++17 for modern features and better type safety
