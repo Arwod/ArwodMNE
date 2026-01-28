@@ -171,11 +171,11 @@ bool MNESourceEstimate::read(QIODevice &p_IODevice, MNESourceEstimate& p_stc)
     // read the data
     //
     p_stc.data = MatrixXd(t_nVertices, t_nTimePts);
-    for(qint32 i = 0; i < p_stc.data.array().size(); ++i)
+    for(qint32 i = 0; i < p_stc.data.size(); ++i)
     {
         float value;
         *t_pStream >> value;
-        p_stc.data.array()(i) = value;
+        p_stc.data.data()[i] = value;
     }
 
     //Update time vector
@@ -226,8 +226,8 @@ bool MNESourceEstimate::write(QIODevice &p_IODevice)
     //
     // write the data
     //
-    for(qint32 i = 0; i < this->data.array().size(); ++i)
-        *t_pStream << (float)this->data.array()(i);
+    for(qint32 i = 0; i < this->data.size(); ++i)
+        *t_pStream << (float)this->data.data()[i];
 
     // close the file
     t_pStream->device()->close();

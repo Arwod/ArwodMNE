@@ -20,7 +20,8 @@ project(test_parametric_tests LANGUAGES CXX)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Test)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Test)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Test)
 find_package(Eigen3 REQUIRED)
 
 set(SOURCES
@@ -30,8 +31,8 @@ set(SOURCES
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_link_libraries(${PROJECT_NAME}
-    Qt6::Core
-    Qt6::Test
+    Qt${QT_VERSION_MAJOR}::Core
+    Qt${QT_VERSION_MAJOR}::Test
     Eigen3::Eigen
     mne_utils
     mne_stats
