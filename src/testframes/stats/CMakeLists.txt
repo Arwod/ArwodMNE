@@ -1,0 +1,4 @@
+add_subdirectory(test_stats)
+add_subdirectory(test_parametric_tests)
+add_subdirectory(test_permutation_properties)
+add_subdirectory(test_correction_properties)

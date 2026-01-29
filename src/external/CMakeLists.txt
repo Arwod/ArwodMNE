@@ -1,4 +1,4 @@
-add_subdirectory(eigen-3.4.0/)
+add_subdirectory(eigen/)
 
 # Tests use Qt Test framework instead of GoogleTest
 

@@ -1,5 +1,31 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.16)
 project(mne_cpp LANGUAGES CXX)
+
+# Minimum Qt version supported
+set(MIN_QT5_VERSION 5.10)
+
+##==============================================================================
+## Compiler support checks
+##==============================================================================
+
+if(MSVC)
+    if(MSVC_VERSION LESS 1900)
+        message(FATAL_ERROR "MSVC version must be 2015 (19.0) or later.")
+    endif()
+    add_compile_options(/bigobj)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "5.3.1")
+        message(FATAL_ERROR "GCC version must be 5.3.1 or later.")
+    endif()
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "3.5")
+        message(FATAL_ERROR "Clang version must be 3.5 or later.")
+    endif()
+endif()
+
+if(WIN32)
+    add_compile_definitions(NOMINMAX)
+endif()
 
 ##==============================================================================
 ## Global build options
@@ -123,8 +149,15 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
 endif()
 
 ##==============================================================================
-find_package(QT NAMES Qt6 Qt5)
+find_package(QT NAMES Qt6 Qt5 REQUIRED)
+if(Qt6_FOUND)
+    set(QT_VERSION_MAJOR 6)
+else()
+    find_package(Qt5 ${MIN_QT5_VERSION} REQUIRED)
+    set(QT_VERSION_MAJOR 5)
+endif()
 message("QT_DIR - ${QT_DIR}")
+message("Qt version: ${Qt${QT_VERSION_MAJOR}_VERSION}")
 
 ##==============================================================================
 ## Save git hash for project

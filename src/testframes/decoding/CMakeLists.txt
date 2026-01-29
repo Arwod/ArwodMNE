@@ -1,0 +1,2 @@
+add_subdirectory(test_decoding)
+add_subdirectory(test_csp_properties)

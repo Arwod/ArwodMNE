@@ -10,3 +10,6 @@
 	path = src/applications/mne_scan/plugins/brainflowboard/brainflow
 	url = https://github.com/brainflow-dev/brainflow
 	branch = master
+[submodule "src/external/eigen"]
+	path = src/external/eigen
+	url = https://gitlab.com/libeigen/eigen.git

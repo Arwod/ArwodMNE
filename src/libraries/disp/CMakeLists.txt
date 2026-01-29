@@ -15,10 +15,9 @@ endif()
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${QT_REQUIRED_COMPONENTS})
 
-if(NOT WASM)
-    if (Qt6_FOUND)
-        find_package(Qt6 REQUIRED COMPONENTS OpenGLWidgets)
-    endif()
+if(NOT WASM AND QT_VERSION_MAJOR EQUAL 6)
+    find_package(Qt6 REQUIRED COMPONENTS OpenGLWidgets)
+    list(APPEND QT_REQUIRED_COMPONENTS OpenGLWidgets)
 endif()
 
 set(SOURCES

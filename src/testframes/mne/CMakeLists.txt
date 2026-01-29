@@ -1,0 +1,5 @@
+add_subdirectory(test_mne_anonymize)
+add_subdirectory(test_mne_msh_display_surface_set)
+add_subdirectory(test_mne_project_to_surface)
+add_subdirectory(test_coregistration)
+add_subdirectory(test_morphing)
