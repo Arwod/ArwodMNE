@@ -19,8 +19,29 @@ BASE_PATH=${SCRIPT_PATH}/..
 argc=$#
 argv=("$@")
 
+doPrintHelp() {
+  echo " "
+  echo "Usage: ./build_submodules.sh [Options]"
+  echo " "
+  echo "This script downloads and builds submodules for the mne-cpp project."
+  echo " "
+  echo "Options:"
+  echo "  help       - Print this help."
+  echo "  lsl        - Update and build liblsl submodule."
+  echo "  brainflow  - Update and build brainflow submodule."
+  echo " "
+}
+
+if [ $argc -eq 0 ]; then
+  doPrintHelp
+  exit 0
+fi
+
 for (( j=0; j<argc; j++)); do
-    if [ "${argv[j]}" == "lsl" ]; then
+    if [ "${argv[j]}" == "help" ]; then
+        doPrintHelp
+        exit 0
+    elif [ "${argv[j]}" == "lsl" ]; then
         cd ${BASE_PATH}
         git submodule update --init src/applications/mne_scan/plugins/lsladapter/liblsl
         cd src/applications/mne_scan/plugins/lsladapter/liblsl
